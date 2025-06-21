@@ -24,26 +24,25 @@ db_path =  "../../data/utopia.sqlite"
 ```{python}
 import sqlite3
 
-# Function to close the database connection
 def close_connection():
     cursor.close()
     conn.close()
-# Function to get the number of rows in a table
+
 def get_row_count(table_name):
     query = f"SELECT COUNT(*) FROM {table_name}"
     cursor.execute(query)
     return cursor.fetchone()[0]
-# Function to get the number of columns in a table
+
 def get_column_count(table_name):
     query = f"PRAGMA table_info({table_name})"
     cursor.execute(query)
     return len(cursor.fetchall())
-# Function to get the table names in the database
+
 def get_table_names():
     query = "SELECT name FROM sqlite_master WHERE type='table'"
     cursor.execute(query)
     return [row[0] for row in cursor.fetchall()]
-# Function to get the table names in the database
+
 def get_table_names():
     query = "SELECT name FROM sqlite_master WHERE type='table'"
     cursor.execute(query)
@@ -78,6 +77,5 @@ for table_name in table_names:
 ```
 
 ```{python}
-# Close the database connection
 close_connection()
 ```
