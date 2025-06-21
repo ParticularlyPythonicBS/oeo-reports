@@ -1,0 +1,21 @@
+project:
+  type: website
+  output-dir: docs
+website:
+  title: OEO Report Dashboard
+  navbar:
+    search: true
+    left:
+    - href: index.qmd
+      text: Home
+    - text: Reports
+      menu:
+      - text: utopia tables
+        href: reports/utopia/tables.qmd
+      - text: US_9R_8D tables
+        href: reports/US_9R_8D/tables.qmd
+format:
+  html:
+    theme: cosmo
+    css: styles.css
+    toc: true

@@ -1,0 +1,12 @@
+---
+title: Welcome to the Report Dashboard
+jupyter: python3
+
+format:
+    html:
+        code-fold: true
+---
+
+This website contains automatically generated reports oeo data
+
+New reports are added as new data becomes available. Please use the **Reports** menu in the navigation bar to view individual reports.

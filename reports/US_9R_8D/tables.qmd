@@ -1,0 +1,83 @@
+---
+title: "US_9R_8D Tables"
+date: now
+execute:
+  enabled: true
+  echo: false
+format:
+    html:
+        code-fold: true
+        toc: true
+        toc-title: "Contents"
+        # toc-location: right
+        toc-depth: 2
+        toc-numbering: true
+        number-sections: true
+---
+```{python}
+#| tags: [parameters]
+
+db_path =  "../../data/US_9R_8D.sqlite"
+```
+
+
+```{python}
+import sqlite3
+
+# Function to close the database connection
+def close_connection():
+    cursor.close()
+    conn.close()
+# Function to get the number of rows in a table
+def get_row_count(table_name):
+    query = f"SELECT COUNT(*) FROM {table_name}"
+    cursor.execute(query)
+    return cursor.fetchone()[0]
+# Function to get the number of columns in a table
+def get_column_count(table_name):
+    query = f"PRAGMA table_info({table_name})"
+    cursor.execute(query)
+    return len(cursor.fetchall())
+# Function to get the table names in the database
+def get_table_names():
+    query = "SELECT name FROM sqlite_master WHERE type='table'"
+    cursor.execute(query)
+    return [row[0] for row in cursor.fetchall()]
+# Function to get the table names in the database
+def get_table_names():
+    query = "SELECT name FROM sqlite_master WHERE type='table'"
+    cursor.execute(query)
+    return [row[0] for row in cursor.fetchall()]
+```
+
+```{python}
+#| output: asis
+
+import pandas as pd
+from itables import show
+from IPython.display import Markdown, display
+
+conn = sqlite3.connect(db_path)
+cursor = conn.cursor()
+
+table_names = get_table_names()
+
+for table_name in table_names:
+    row_count = get_row_count(table_name)
+    column_count = get_column_count(table_name)
+    display(Markdown(f"\n\n"))
+    display(Markdown(f"## {table_name}"))
+
+    if row_count == 0 or column_count == 0:
+        display(Markdown("No data available in this table.\n\n"))
+        continue
+    df = pd.read_sql_query(f"SELECT * FROM '{table_name}' LIMIT 1000", conn)
+    show(df, max_rows=10, max_cols=10, name=table_name, options={"scrollX": True, "scrollY": "300px", "pageLength": 10, "warn_on_undocumented_options":False})
+    display(Markdown(f"**Row Count:** {row_count} | **Column Count:** {column_count}"))
+
+```
+
+```{python}
+# Close the database connection
+close_connection()
+```
