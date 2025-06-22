@@ -1,1 +1,1 @@
-Sitemap: https://eclectic-pie-a46c23.netlify.app/sitemap.xml
+Sitemap: https://oeo.netlify.app/sitemap.xml
