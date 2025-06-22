@@ -1,0 +1,310 @@
+---
+title: "Electric Sector Overview"
+date: now
+execute:
+  enabled: true
+  echo: false
+format:
+    html:
+        code-fold: true
+        toc: true
+        toc-title: "Contents"
+        # toc-location: right
+        toc-depth: 3
+        toc-numbering: true
+        number-sections: true
+---
+
+```{python}
+#| tags: [parameters]
+
+db_path =  "../../data/US_9R_8D.sqlite"
+```
+
+The electric sector includes a representation of existing and new generation technologies, indexed by the region in which they are located. Thermal power plants include coal-fired steam, natural gas steam plants, open cycle and combined-cycle natural gas turbines with and without CCS, and light water nuclear reactors. Renewable sources include conventional hydro, centralized solar photovoltaics (PV), wind, biomass, and geothermal technologies.
+
+Data for the electric sector is compiled using [PowerGenome](https://github.com/gschivley/PowerGenome), an open-source tool that allows users to create input datasets for power system capacity expansion models. PowerGenome primarily uses data from the National Renewable Energy Laboratory (NREL), the US Energy Information Administration (EIA) and the US Environmental Protection Agency (EPA). Much of these underlying data have been compiled by the Catalyst Cooperative's Public Utility Data Liberation Project [(PUDL)](https://github.com/catalyst-cooperative/pudl) into a single SQLite database that PowerGenome uses.
+
+Using [PowerGenome](https://github.com/gschivley/PowerGenome), we experimented with the aggregation of balancing authorities (as defined by [EPA's Integrated Planning Model regions](https://www.epa.gov/sites/production/files/2019-03/documents/chapter_3_0.pdf)) into nine OEO regions, to develop the spatial representation for the electric sector shown in @fig-ipm-regions. For all other sectors, we follow the spatial aggregation as shown in figure 1 of the Overview notebook.
+
+![The nine US regions developed for the electric sector in the OEO input database, based on aggregations of IPM regions](../../assets/IPM_regions_to_temoa_state_groups.jpg){#fig-ipm-regions fig-cap-location="margin"}
+
+## Generator clusters
+
+The following table presents an exhaustive list of all existing and new generation technologies included in the OEO input database.
+
+```{python}
+import sqlite3
+import pandas as pd
+from itables import show
+from IPython.display import Markdown, display
+
+import warnings
+# warnings.filterwarnings("ignore", module='itables')
+
+
+def close_connection():
+    cursor.close()
+    conn.close()
+
+```
+
+```{python}
+#| output: asis
+#| tbl-align: "left"
+#| label: "tbl-generators"
+#| tbl-cap: "Electric generators in the OEO input database"
+#| tbl-cap-location: margin
+
+
+conn = sqlite3.connect(db_path)
+cursor = conn.cursor()
+
+df = pd.read_sql_query("SELECT tech, tech_desc FROM technologies", conn)
+df['tech_desc'] = df['tech_desc'].str.replace('#','')
+df.columns = ["Technology", "Description"]
+show(df,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="generators", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+
+```
+
+### Existing generators
+
+Existing electricity sector operations in the modeled regions cannot be represented by individual generator operations due to computational issues. In order to develop a reduced-order representation of these generators that is tractably solved, [PowerGenome](https://github.com/gschivley/PowerGenome) uses k-means clustering techniques to aggregate existing generators into groups or clusters. The generators are grouped into clusters using four generator characteristics: nameplate capacity, heat rate, installation year, and fixed O&M costs.
+
+In each region, existing conventional coal steam and natural gas combined cycle (NGCC) plants are represented by 4 clusters each, natural gas combustion turbine (NGCT), natural gas steam turbine (NGST), nuclear, and conventional hydroelectric plants are represented by 2 clusters each, while all other technology types - biomass, geothermal, centralized solar photovoltaic, onshore wind - are represented by a single cluster each.
+
+### New thermal generators
+
+New thermal generators are represented by a single cluster for every modeled year and include NGCC, NGCT, NGCC with 90% efficient carbon capture and storage (CCS), NGCC with 100% efficient CCS, geothermal (hydro binary and hydro flash technologies), coal integrated gasification combined cycle (IGCC), ultra-supercritical pulverized coal with 90% efficient CCS, biomass combined-cycle, and hydrogen combined-cycle. Data for these technologies are derived from the NREL Annual Technology Baseline (ATB) via PowerGenome, except for a few listed below:
+
+- Hydrogen combined-cycle turbines (E_H2CC_N): Hydrogen at 100 bar pressure can be burned in combined-cycle turbines to produce electricity, which is assumed to have the same techno-economic characteristics as NGCC generators, but without any combustion emissions.
+- Bio-energy with carbon capture and storage (E_BECCS_N): This technology representation comes from the original US EPA MARKAL database, and will be updated in the near-term.
+- Hydrogen storage (H2_STO150): This technology representation comes from [Dowling et al. 2020](https://www.cell.com/joule/fulltext/S2542-4351(20)30325-1).
+
+In the near future, we plan to consider adding modular nuclear reactor technologies to the OEO input database as well, although this technology pathway is currently not reported in the NREL ATB.
+
+### New renewable generator clusters
+
+In all model regions, new utility solar PV and onshore wind capacities are represented by three clusters each, while offshore wind is represented by a single cluster in the CA, NW, NE regions. Techno-economic data for all renewable clusters of a single technology type (except for capacity factor and maximum available capacity) are identical and derived from the NREL ATB via PowerGenome. Further, PowerGenome uses k-means clustering to develop these groups, which differ by capacity factor and maximum available capacity in each region. This is explained in greater detail in [Section 1.5](https://github.com/TemoaProject/oeo/blob/6f2f706df19df25d251da4c1add92793bcfcbb4e/database_documentation/#capfac).
+
+Although PowerGenome doesn't explicitly develop technology clusters for new residential-scale PV, we can use the tool to develop cost estimates (investment and O&M costs) for a single representative cluster, with underlying data from the NREL ATB. As an approximation, we use the capacity factors developed for the three utility PV clusters in each region to represent residential PV generation as well. Each cluster has the same cost estimates, as developed through PowerGenome. Residential PV annual generation is specified exogenously, with data from the [NREL dGen](https://maps.nrel.gov/dgen) model's Mid (PV cost) scenario --- data available at the state level is aggregated to each of the nine OEO regions. This technology is assumed to have no other resource constraints.
+
+We also develop a single cluster of concentrating solar thermal technologies in the California and Southwestern US regions. In the NREL ATB, the [representative](https://atb.nrel.gov/electricity/2020/index.php?t=sc) technology is assumed to be a 100 MW molten salt power-tower with 10 hours of thermal energy storage, driven by Class 5 (excellent) resources. While NREL reports an average capacity factor of 64% for this technology pathway, we currently do not have any hourly capacity factor information available, and therefore we assume a constant 64% capacity factor across all time periods for now.
+
+The sections that follow provide details for the data used to generate the input database for the OEO.
+
+## Costs
+
+Investment and operating costs of electric generators are drawn from the 2021 NREL ATB via PowerGenome. All costs are reported in 2018US$.
+
+While the ATB publishes data for a number of relevant scenarios, the following parameters are used to select data for the OEO input database.
+
+| Parameter                   | Value    | Notes                                                                                 |
+|-----------------------------|----------|---------------------------------------------------------------------------------------|
+| ATB Base Year               | 2019     |                                                                                       |
+| Technology costs case       | Moderate | with "expected level of technology innovation" [(NREL, 2021)](https://atb.nrel.gov/electricity/2021/definitions)                           |
+| Financial case              | Market   | "includes effects of tax reform and tax credits" [(NREL, 2021)](https://atb.nrel.gov/electricity/2021/definitions)                         |
+| Capital recovery period     | 20 years |                                                                                       |
+| AC to DC ratio for PV       | 1.3      | utility-scale solar PV is assumed to be single axis tracking                          |
+
+### Investment costs
+
+Overnight capital costs from the NREL ATB are used to characterize the investment costs of technologies that will likely be available in the modeling time-horizon, for all technologies other than the few mentioned in [Section 1.1.2](https://github.com/TemoaProject/oeo/blob/6f2f706df19df25d251da4c1add92793bcfcbb4e/database_documentation/#new_gens). All technologies other than solar and wind are limited are represented as a single technology cluster. For solar and wind technologies, multiple clusters that have varying capacity factors and maximum available capacity are developed using the clustering techniques within PowerGenome. However, all clusters of a single technology type are assumed to have the same investment costs.
+
+The ATB does not report variations in investment costs across regions, and so PowerGenome uses appropriate regional cost-multipliers from the EIA Annual Energy Outlook (AEO) Electricity Market Module (EMM) in order to adjust capital costs. According to the EIA [EMM documentation](https://www.eia.gov/outlooks/aeo/assumptions/pdf/electricity.pdf), these multipliers can account for regional variations in factors such as ambient air conditions and how that may affect combustion turbine available capacity, or accessing wind resources. These multipliers are not available for all technology-region combinations, and so the following approximations are made:
+
+- _Bio-energy with carbon capture and storage (BECCS)_: Regional multipliers assumed to be the same as coal IGCC-CCS plants.
+- _Hydrogen storage (H2\_STO150)_: Regional multipliers assumed to be the same as battery technologies.
+- _Geothermal (E\_GEOF\_N, E\_GEOB\_N)_: Regional multipliers assumed to be the same as NGCC plants.
+- _Any remaining technologies within a region that do not have cost multiplier data_: Regional multipliers assumed to be the average of multipliers for all available technologies within that region.
+
+The form below can be used to display the investment costs by technology, region, and time period.
+
+::: {.panel-tabset}
+
+## Table
+
+```{python}
+
+df = pd.read_sql(
+        "SELECT regions, tech,vintage, cost_invest, cost_invest_units FROM CostInvest WHERE tech IN (SELECT tech FROM technologies WHERE sector=='electric') ORDER BY tech, vintage",
+        conn)
+
+df_sel = df.pivot_table(
+                index=['regions', 'tech', 'cost_invest_units'],
+                columns='vintage',
+                values='cost_invest').reset_index()
+
+df_sel.rename(columns={'cost_invest_units': 'units'}, inplace=True)
+
+if 'vintage' in df_sel.columns.names:
+    df_sel.columns.name = None
+
+identifier_cols = ['regions', 'tech', 'units']
+year_cols = sorted([col for col in df_sel.columns if col not in identifier_cols and col != ''])
+desired_columns = identifier_cols + year_cols
+
+df_sel = df_sel[desired_columns]
+
+show(df_sel,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="Investment Costs", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+
+```
+
+## Plots
+
+```{python}
+import plotly.express as px
+import plotly.graph_objects as go
+
+
+df_plot = pd.read_sql(
+    "SELECT regions, tech, vintage, cost_invest FROM CostInvest WHERE tech IN (SELECT tech FROM technologies WHERE sector=='electric') ORDER BY tech, vintage",
+    conn
+)
+
+# 1. Create the interactive Plotly Express figure
+
+fig = px.line(
+    df_plot,
+    x='vintage',
+    y='cost_invest',
+    color='tech',
+    line_group='regions',
+    hover_name='regions',
+    hover_data={
+        'tech': True,
+        'vintage': True,
+        'cost_invest': ':.2f'
+    },
+    # title='Investment Costs vs. Vintage by Technology and Region',
+    labels={
+        'vintage': 'Vintage Year',
+        'cost_invest': 'Investment Cost ($M/GW)',
+        'tech': 'Technology'
+    }
+)
+
+
+# 2. Add interactive dropdown filters
+
+all_regions = df_plot['regions'].unique().tolist()
+all_techs = df_plot['tech'].unique().tolist()
+
+all_regions.sort()
+all_techs.sort()
+
+region_buttons = []
+region_buttons.append(dict(
+    args=[
+        {'visible': [True] * len(fig.data)},
+        {'title': 'Investment Costs vs. Vintage by Technology and Region'}
+    ],
+    label='All Regions',
+    method='update'
+))
+for region_val in all_regions:
+    region_buttons.append(dict(
+        args=[
+            {'visible': [trace.legendgroup == region_val for trace in fig.data]},
+            {'title': f'Investment Costs vs. Vintage for Region: {region_val}'}
+        ],
+        label=region_val,
+        method='update'
+    ))
+
+tech_buttons = []
+tech_buttons.append(dict(
+    args=[
+        {'visible': [True] * len(fig.data)},
+        {'title': 'Investment Costs vs. Vintage by Technology and Region'}
+    ],
+    label='All Technologies',
+    method='update'
+))
+for tech_val in all_techs:
+    tech_buttons.append(dict(
+        args=[
+            {'visible': [trace.name == tech_val for trace in fig.data]},
+            {'title': f'Investment Costs vs. Vintage for Technology: {tech_val}'}
+        ],
+        label=tech_val,
+        method='update'
+    ))
+
+# Update layout with dropdowns
+fig.update_layout(
+    updatemenus=[
+        dict(
+            type='dropdown',
+            direction='down',
+            x=0.01,
+            y=1.2,
+            showactive=True,
+            buttons=region_buttons,
+            pad={"r": 10, "t": 10},
+            xanchor="left",
+            yanchor="top",
+            font=dict(size=12)
+        ),
+        dict(
+            type='dropdown',
+            direction='down',
+            x=0.2,
+            y=1.2,
+            showactive=True,
+            buttons=tech_buttons,
+            pad={"r": 10, "t": 10},
+            xanchor="left",
+            yanchor="top",
+            font=dict(size=12)
+        )
+    ],
+    annotations=[
+        go.layout.Annotation(
+            text="Filter by Region:",
+            x=0.01,
+            y=1.28,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            xanchor="left",
+            yanchor="top",
+            font=dict(size=12)
+        ),
+        go.layout.Annotation(
+            text="Filter by Technology:",
+            x=0.2,
+            y=1.28,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            xanchor="left",
+            yanchor="top",
+            font=dict(size=12)
+        )
+    ]
+)
+
+fig.show()
+
+```
+
+```{python}
+close_connection()
+```
