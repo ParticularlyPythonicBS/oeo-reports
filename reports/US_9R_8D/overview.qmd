@@ -332,8 +332,6 @@ else:
 Use the lookup tool above to identify specific commodity or technology names. Type the name in the box below to generate a corresponding network diagram for that commodity or technology. The slider can be used to view different upstream levels of the network diagram.
 
 
-{{< panel-button >}}
-{{< jupyter-widgets >}}
 ```{python}
 import ipywidgets as widgets
 from ipywidgets import HBox, VBox, Layout
@@ -391,8 +389,6 @@ out = widgets.interactive_output(f, {'w': w})
 display(out)
 
 ```
-{{< /jupyter-widgets >}}
-{{< /panel-button >}}
 
 ```{python}
 close_connection()
