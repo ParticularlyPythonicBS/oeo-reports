@@ -305,6 +305,132 @@ fig.show()
 
 ```
 
+:::
+
+### Fixed Operations and Maintenance (O&M) Costs
+
+New generator costs are derived from the NREL ATB via PowerGenome. Solar PV technology fixed costs reported by NREL on a DC basis are adjusted using an assumed AC to DC ratio for PV of 1.3 (as noted in the table above). PowerGenome uses data from the [EIA](https://www.eia.gov/analysis/studies/powerplants/generationcost/pdf/full_report.pdf) to characterize fixed O&M costs associated with existing individual generators, where available. Mean costs based on available data are estimated for categories of generators based on their capacity (e.g., for combined cycle plants between 500 and 1000 MW) and assigned to all the generators in that category. For generator types where these data are not available from EIA, PowerGenome uses data for new generators from the NREL ATB and linearly adjusts them to existing generators based on their respective heat rate values.
+
+::: {.panel-tabset}
+
+## Table
+
+```{python}
+
+df = pd.read_sql(
+        "SELECT regions, tech,vintage, cost_fixed_units, AVG(cost_fixed) AS cost_fixed FROM CostFixed WHERE tech IN (SELECT tech FROM technologies WHERE sector=='electric') GROUP BY regions, tech,vintage ORDER BY tech, vintage",
+        conn)
+
+# df_sel = df.pivot_table(index=['regions','tech', 'cost_fixed_units'], columns='vintage', values='cost_fixed').reset_index().set_index('regions')
+df.columns = ["Region", "Technology", "Vintage", "Units", "Fixed Cost"]
+
+show(df,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="Investment Costs", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+
+```
+
+## Plots
+
+```{python}
+
+import plotly.express as px
+import plotly.graph_objects as go
+
+df = pd.read_sql(
+    """
+    SELECT regions, tech, vintage, cost_fixed_units, AVG(cost_fixed) AS cost_fixed
+    FROM CostFixed
+    WHERE tech IN (SELECT tech FROM technologies WHERE sector='electric')
+    GROUP BY regions, tech, vintage
+    ORDER BY tech, vintage
+    """, conn)
+
+# Group techs (strip numeric suffixes)
+def base_tech(t):  # 'solar_2030' → 'solar'
+    try:
+        int(t.split('_')[-1])
+        return '_'.join(t.split('_')[:-1])
+    except:
+        return t
+
+df["base_tech"] = df["tech"].apply(base_tech)
+
+fig = go.Figure()
+
+all_base_techs = sorted(df["base_tech"].unique())
+all_regions = sorted([r for r in df["regions"].unique() if '-' not in r])
+
+trace_map = {}  # (region, tech) → [trace indices]
+buttons = []
+
+for region in all_regions:
+    for tech in all_base_techs:
+        subdf = df[(df["regions"] == region) & (df["base_tech"] == tech)]
+        if subdf.empty:
+            continue
+
+        trace = go.Bar(
+            x=subdf["vintage"],
+            y=subdf["cost_fixed"],
+            name=f"{tech} ({region})",
+            customdata=subdf[["tech", "vintage"]],
+            hovertemplate="<b>Tech</b>: %{customdata[0]}<br>"
+                          "<b>Vintage</b>: %{customdata[1]}<br>"
+                          "<b>Fixed Cost</b>: %{y:.2f}<extra></extra>",
+            visible=False
+        )
+        trace_index = len(fig.data)
+        fig.add_trace(trace)
+
+        # Add dropdown button for this combination
+        visible = [False] * (trace_index + 1)
+        visible[trace_index] = True
+
+        buttons.append(dict(
+            label=f"{tech} / {region}",
+            method="update",
+            args=[
+                {"visible": visible},
+                {"title": f"{tech} in {region}"}
+            ]
+        ))
+fig.update_layout(
+    updatemenus=[
+        dict(
+            buttons=buttons,
+            direction="down",
+            showactive=True,
+            x=0.01, y=1.15,
+            xanchor="left",
+            yanchor="top"
+        )
+    ],
+    xaxis_title="Vintage",
+    yaxis_title="Fixed Cost ($M/GWyr)",
+    barmode="group",
+    height=600,
+    margin=dict(t=100)
+)
+
+fig.show()
+
+
+
+```
+
+
+
+:::
+
+
+
 ```{python}
 close_connection()
 ```
