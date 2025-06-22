@@ -12,6 +12,8 @@ website:
       menu:
       - text: utopia tables
         href: reports/utopia/tables.qmd
+      - text: US_9R_8D overview
+        href: reports/US_9R_8D/overview.qmd
       - text: US_9R_8D tables
         href: reports/US_9R_8D/tables.qmd
 format:

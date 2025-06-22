@@ -24,6 +24,9 @@ db_path =  "../../data/utopia.sqlite"
 ```{python}
 import sqlite3
 
+import warnings
+warnings.filterwarnings("ignore", module='itables')
+
 def close_connection():
     cursor.close()
     conn.close()

@@ -103,6 +103,10 @@ ul.task-list li input[type="checkbox"] {
  <span class="dropdown-text">utopia tables</span></a>
   </li>  
         <li>
+    <a class="dropdown-item" href="./reports/US_9R_8D/overview.html">
+ <span class="dropdown-text">US_9R_8D overview</span></a>
+  </li>  
+        <li>
     <a class="dropdown-item" href="./reports/US_9R_8D/tables.html">
  <span class="dropdown-text">US_9R_8D tables</span></a>
   </li>  
@@ -222,7 +226,7 @@ ul.task-list li input[type="checkbox"] {
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/eclectic-pie-a46c23\.netlify\.app");
+        var filterRegex = new RegExp('/' + window.location.host + '/');
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
