@@ -7,6 +7,6 @@ format:
         code-fold: true
 ---
 
-This website contains automatically generated reports oeo data
+This website contains automatically generated reports on OEO data
 
 New reports are added as new data becomes available. Please use the **Reports** menu in the navigation bar to view individual reports.

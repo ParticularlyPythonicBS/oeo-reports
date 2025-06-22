@@ -1,0 +1,13 @@
+---
+title: utopia Report Dashboard
+jupyter: python3
+
+format:
+    html:
+        code-fold: true
+---
+
+Here are the reports for the utopia dataset:
+
+- [Tables](tables.qmd)
+
