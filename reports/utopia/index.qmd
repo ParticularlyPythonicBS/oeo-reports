@@ -10,4 +10,3 @@ format:
 Here are the reports for the utopia dataset:
 
 - [Tables](tables.qmd)
-

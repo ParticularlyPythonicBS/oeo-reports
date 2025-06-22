@@ -15,12 +15,13 @@ format:
         number-sections: true
 ---
 
-# Introduction
 ```{python}
 #| tags: [parameters]
 
 db_path =  "../../data/US_9R_8D.sqlite"
 ```
+
+# Introduction
 
 This notebook serves as the documentation for the Temoa input database used to produce the Open Energy Outlook (OEO) for the United States. [Temoa](https://temoacloud.com/) is an energy system optimization model, and thus performs capacity expansion of energy technologies across the whole energy system --- fuel supply, electricity, transport, buildings and industry --- over several future decades. This documentation is meant to provide a thorough explanation of the how technologies, commodities, and end-use demands are represented within the model, and also serves as a data repository and benchmark for other modeling efforts. Note that modeling such a complex system over several decades requires simplifications in order to make the model tractable.
 
@@ -35,7 +36,6 @@ For the Open Energy Outlook, our [Roadmap](https://github.com/TemoaProject/oeo/b
 Spatial resolution. Regional differences in fuel supply, renewable resources, end-use demands, and existing capacities are an important determinant of how the future US energy system may evolve. While it would be useful to model all 50 states, particularly so we can capture state-level energy and climate policies, such a spatial resolution would be computational infeasible, given the other modeling requirements. Thus we need to aggregate states into regions. One of the critical challenges in choosing regions is the electric sector representation, where balancing authorities do not neatly follow state lines. Using [PowerGenome](https://github.com/PowerGenome/PowerGenome), we experimented with the aggregation of balancing authorities into regions that largely follow state boundaries, while still capturing the variations in supply and demand across the country. More details are given the electric power section of this document. @fig-regions shows the regions in the database, based on state-level aggregations, while @tbl-regions provides the definition of each region.
 
 ![The nine US regions in the OEO input database](../../assets/states_to_temoa_state_groups.jpg){#fig-regions fig-cap-location="margin"}
-
 
 ```{python}
 import sqlite3
@@ -331,6 +331,9 @@ else:
 ## Network diagram lookup tool (WIP)
 Use the lookup tool above to identify specific commodity or technology names. Type the name in the box below to generate a corresponding network diagram for that commodity or technology. The slider can be used to view different upstream levels of the network diagram.
 
+
+{{< panel-button >}}
+{{< jupyter-widgets >}}
 ```{python}
 import ipywidgets as widgets
 from ipywidgets import HBox, VBox, Layout
@@ -388,7 +391,8 @@ out = widgets.interactive_output(f, {'w': w})
 display(out)
 
 ```
-
+{{< /jupyter-widgets >}}
+{{< /panel-button >}}
 
 ```{python}
 close_connection()
