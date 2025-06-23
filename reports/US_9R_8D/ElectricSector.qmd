@@ -40,7 +40,7 @@ from itables import show
 from IPython.display import Markdown, display
 
 import warnings
-# warnings.filterwarnings("ignore", module='itables')
+warnings.filterwarnings("ignore", module='itables')
 
 
 def close_connection():
@@ -327,7 +327,7 @@ df.columns = ["Region", "Technology", "Vintage", "Units", "Fixed Cost"]
 show(df,
     columnDefs=[{"width": "120px", "targets": "_all"}],
     autoWidth=False,
-    max_rows=10, max_cols=10, name="Investment Costs", options={
+    max_rows=10, max_cols=10, name="Fixed Operations and Maintenance (O&M) Costs", options={
     "scrollX": True,
     "scrollY": "300px",
     "pageLength": 10,
@@ -421,13 +421,605 @@ fig.update_layout(
 
 fig.show()
 
+```
+
+:::
+
+### Variable Operations and Maintenance Costs
+
+New generator costs are derived from the NREL ATB via PowerGenome. PowerGenome uses data from the [EIA](https://www.eia.gov/analysis/studies/powerplants/generationcost/pdf/full_report.pdf) to characterize variable costs of existing individual generators, where available. Mean costs based on available data are estimated for categories of generators based on their capacity (e.g., for combined cycle plants between 500 and 1000 MW) and assigned to all the generators in that category. For generator types where these data are not available from EIA, PowerGenome uses data for new generators from the NREL ATB and linearly adjusts them to existing generators based on their respective heat rate values.
+
+::: {.panel-tabset}
+
+## Table
+
+```{python}
+
+df = pd.read_sql(
+        "SELECT regions, tech,vintage, cost_variable_units, AVG(cost_variable) AS cost_variable FROM CostVariable WHERE tech IN (SELECT tech FROM technologies WHERE sector=='electric') AND cost_variable> 0 GROUP BY regions, tech,vintage ORDER BY vintage",
+        conn)
+
+df.columns = ["Region", "Technology", "Vintage", "Units", "Variable Cost"]
+
+show(df,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="Variable Operations and Maintenance Costs", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+
+```
+
+## Plots
+
+```{python}
+
+import plotly.express as px
+import plotly.graph_objects as go
+
+df = pd.read_sql(
+    "SELECT regions, tech,vintage, cost_variable_units, AVG(cost_variable) AS cost_variable FROM CostVariable WHERE tech IN (SELECT tech FROM technologies WHERE sector=='electric') AND cost_variable> 0 GROUP BY regions, tech,vintage ORDER BY vintage",
+    conn)
+
+# Group techs (strip numeric suffixes)
+def base_tech(t):  # 'solar_2030' → 'solar'
+    try:
+        int(t.split('_')[-1])
+        return '_'.join(t.split('_')[:-1])
+    except:
+        return t
+
+df["base_tech"] = df["tech"].apply(base_tech)
+
+fig = go.Figure()
+
+all_base_techs = sorted(df["base_tech"].unique())
+all_regions = sorted([r for r in df["regions"].unique() if '-' not in r])
+
+trace_map = {}  # (region, tech) → [trace indices]
+buttons = []
+
+for region in all_regions:
+    for tech in all_base_techs:
+        subdf = df[(df["regions"] == region) & (df["base_tech"] == tech)]
+        if subdf.empty:
+            continue
+
+        trace = go.Bar(
+            x=subdf["vintage"],
+            y=subdf["cost_variable"],
+            name=f"{tech} ({region})",
+            customdata=subdf[["tech", "vintage"]],
+            hovertemplate="<b>Tech</b>: %{customdata[0]}<br>"
+                          "<b>Vintage</b>: %{customdata[1]}<br>"
+                          "<b>Variable Cost</b>: %{y:.2f}<extra></extra>",
+            visible=False
+        )
+        trace_index = len(fig.data)
+        fig.add_trace(trace)
+
+        # Add dropdown button for this combination
+        visible = [False] * (trace_index + 1)
+        visible[trace_index] = True
+
+        buttons.append(dict(
+            label=f"{tech} / {region}",
+            method="update",
+            args=[
+                {"visible": visible},
+                {"title": f"{tech} in {region}"}
+            ]
+        ))
+fig.update_layout(
+    updatemenus=[
+        dict(
+            buttons=buttons,
+            direction="down",
+            showactive=True,
+            x=0.01, y=1.15,
+            xanchor="left",
+            yanchor="top"
+        )
+    ],
+    xaxis_title="Vintage",
+    yaxis_title="Variable Cost ($M/PJ)",
+    barmode="group",
+    height=600,
+    margin=dict(t=100)
+)
+
+fig.show()
+
+```
+:::
+
+### Existing Capaciy
+PowerGenome uses generator data from 2018 to report the existing electric generation capacity. The (winter) capacities for individual generators are obtained from the US EIA 860 and 923 files via the [PUDL](https://github.com/catalyst-cooperative/pudl) database. PowerGenome then combines the individual generators to create a few clusters that are representative of the entire fleet, using k-means clustering.
+
+
+```{python}
+
+#map powerplant categories
+map_plants = dict()
+map_plants['COAL'] = 'Coal'
+map_plants['GEO'] = 'Geothermal'
+map_plants['BIO'] = 'Biomass'
+map_plants['HYD'] = 'Hydro'
+map_plants['NG'] = 'Natural Gas'
+map_plants['WND'] = 'Wind'
+map_plants['SOL'] = 'Solar'
+map_plants['URN'] = 'Nuclear'
+map_plants['Batt'] = 'Battery'
+
+col_order = ['Biomass','Geothermal','Hydro','Nuclear','Coal','Natural Gas','Solar','Wind','Hydrogen','Battery']
+
+df = pd.read_sql(
+        "SELECT regions, tech,vintage, exist_cap FROM ExistingCapacity WHERE tech IN (SELECT tech FROM technologies \
+    WHERE sector=='electric' AND flag!='ps') AND tech!='E_TRANS_R' ORDER BY tech",
+        conn)
+
+df.loc[:,'agg_tech'] = [map_plants[y] for x in df.tech for y in map_plants.keys() if y.lower() in x.lower()] #map agg technologies
+df_sum = df.drop("vintage", axis=1).groupby(by = ['regions','agg_tech','tech']).sum().reset_index()
+df_sum.sort_values(by='exist_cap', ascending=False, inplace=True)
+df_sum.columns = ["Region", "Technology Type", "Technology", "Capacity (GW)"]
+
+df_sum = df_sum.reset_index(drop=True)
+
+show(df_sum,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="Existing Capacity", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+
+```
+
+### Efficiency <a class="anchor" id="efficiency"></a>
+The efficiency of each generator cluster is represented as the mean of the individual generators in each cluster. PowerGenome compiles existing generator heat rates from the US EIA 860 and 923 files via the [PUDL](https://github.com/catalyst-cooperative/pudl) database, and heat rates for new technologies from the NREL ATB. The total capacity of each technology cluster and the associated efficiencies are reported in the table below.
+
+```{python}
+import numpy as np
+
+df = pd.read_sql("SELECT regions, tech, vintage, efficiency FROM Efficiency WHERE tech IN (SELECT tech FROM technologies WHERE sector=='electric') AND efficiency < 1 ORDER BY tech, vintage", conn)
+df_cap = pd.read_sql("SELECT regions, tech,vintage, exist_cap FROM ExistingCapacity WHERE tech IN (SELECT tech FROM technologies WHERE sector=='electric') ORDER BY tech, vintage", conn)
+df_cap.exist_cap = np.round(df_cap.exist_cap*100)/100
+df = pd.merge(df, df_cap, on = ['regions','tech','vintage'], how='left')
+# df.fillna('--', inplace=True)
+
+df.columns = ["Region", "Technology", "Vintage", "Efficiency (%)", "Capacity (GW)"]
+
+# df_sum = df_sum.reset_index(drop=True)
+
+show(df,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="Efficiency", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+
+```
+
+### Capacity Factors and Capacity of Variable Renewable Energy
+
+A number of clusters representing variable renewable technologies (as presented in [Section 1.1.3](#new_vre_gens)) are selected for each region using clustering techniques in PowerGenome.
+
+Annual hourly electricity load and variable renewables capacity factor data for a representative year (2012) are used. Historical capacity factors of existing capacity are obtained from EIA, while data for potential new generators are obtained from datasets developed by [Vibrant Clean Energy](https://www.vibrantcleanenergy.com/products/). The renewables capacity factors for potential new generators are modeled using 2012 weather data. VRE capacity factor and maximum available resource data are available through these datasets at a specific grid-level resolution for the entire United States. These are aggregated to the specified number of technology clusters in each of the nine OEO regions using clustering techniques. Further details on these datasets are forthcoming (in PowerGenome documentation).
+
+In the current OEO database, annual energy supply and demand is represented by a few days at an hourly resolution. Specifically, service demands across all the sectors as well as variable renewable energy supply are characterized at this resolution for all the US modeled regions. Therefore the annual hourly datasets for each specified technology cluster are jointly downscaled to a few representative days, using k-means clustering within PowerGenome (e.g., see [Mallapragada et al, 2018](https://doi.org/10.1016/j.energy.2018.08.015)).
+
+```{python}
+
+df = pd.read_sql("SELECT regions, season_name,time_of_day_name,tech,cf_tech FROM CapacityFactorTech ORDER BY tech", conn)
+df_maxcap = pd.read_sql("SELECT regions,tech, periods, maxcap FROM MaxCapacity WHERE tech in (SELECT DISTINCT(tech) FROM CapacityFactorTech)", conn)
+df_maxcap = df_maxcap.groupby(by=['regions','tech']).mean().reset_index().drop(columns=['periods'])
+
+df_maxcap.columns = ["Region", "Technology", "Max Capacity (GW)"]
+
+
+show(df_maxcap,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="Max Capacity", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+
+fig = go.Figure()
+
+# To enable combined filtering, we need to iterate through unique combinations
+# of region and technology, and assign properties to each trace that allow
+# the dropdowns to hide/show them.
+# Each trace will represent a specific technology within a specific region.
+for region_val in df['regions'].unique():
+    for tech_val in df['tech'].unique():
+        df_filtered = df[(df['regions'] == region_val) & (df['tech'] == tech_val)]
+        if not df_filtered.empty:
+            fig.add_trace(go.Scatter(
+                x=np.arange(len(df_filtered)),  # Use index as x-axis
+                y=df_filtered['cf_tech'],
+                mode='lines',
+                # Name will be used in legend, combining region and tech for clarity
+                name=f'{region_val} - {tech_val}',
+                legendgroup=region_val, # Use legendgroup for region filtering
+                customdata=[tech_val] * len(df_filtered), # Use customdata for tech filtering
+                hovertemplate=
+                    "<b>Region:</b> %{legendgroup}<br>" +
+                    "<b>Technology:</b> %{customdata}<br>" +
+                    "<b>Hour:</b> %{x}<br>" +
+                    "<b>Capacity Factor:</b> %{y:.2f}<extra></extra>"
+            ))
+
+# 2. Add interactive dropdown filters
+
+all_regions = df['regions'].unique().tolist()
+all_techs = df['tech'].unique().tolist()
+
+all_regions.sort()
+all_techs.sort()
+
+# --- Region Buttons ---
+region_buttons = []
+region_buttons.append(dict(
+    args=[
+        # For 'All Regions', all traces are visible
+        {'visible': [True] * len(fig.data)},
+        {'title': 'Power plant capacity factors by technology cluster'}
+    ],
+    label='All Regions',
+    method='update'
+))
+for region_val in all_regions:
+    region_buttons.append(dict(
+        args=[
+            # A trace is visible if its 'legendgroup' (which we set to region_val) matches
+            {'visible': [trace.legendgroup == region_val for trace in fig.data]},
+            {'title': f'Capacity Factors for Region: {region_val}'}
+        ],
+        label=region_val,
+        method='update'
+    ))
+
+# --- Technology Buttons ---
+tech_buttons = []
+tech_buttons.append(dict(
+    args=[
+        # For 'All Technologies', all traces are visible
+        {'visible': [True] * len(fig.data)},
+        {'title': 'Power plant capacity factors by technology cluster'}
+    ],
+    label='All Technologies',
+    method='update'
+))
+for tech_val in all_techs:
+    tech_buttons.append(dict(
+        args=[
+            # A trace is visible if its 'customdata' (first element) matches the tech_val
+            # Note: customdata is a list per point, so we check the first element
+            {'visible': [trace.customdata[0] == tech_val if trace.customdata else False for trace in fig.data]},
+            {'title': f'Capacity Factors for Technology: {tech_val}'}
+        ],
+        label=tech_val,
+        method='update'
+    ))
+
+# Update layout with dropdowns
+fig.update_layout(
+    xaxis_title='Hour',
+    yaxis_title='Capacity Factor',
+    yaxis_range=[0, 1],
+    hovermode='x unified', # Still good for showing all traces at a given x-point
+    updatemenus=[
+        dict(
+            type='dropdown',
+            direction='down',
+            x=0.01, # Position for Region dropdown
+            y=1.2,
+            showactive=True,
+            buttons=region_buttons,
+            pad={"r": 10, "t": 10},
+            xanchor="left",
+            yanchor="top",
+            font=dict(size=12)
+        ),
+        dict(
+            type='dropdown',
+            direction='down',
+            x=0.2, # Position for Technology dropdown (adjust as needed)
+            y=1.2,
+            showactive=True,
+            buttons=tech_buttons,
+            pad={"r": 10, "t": 10},
+            xanchor="left",
+            yanchor="top",
+            font=dict(size=12)
+        )
+    ],
+)
+
+fig.show()
+
+```
+
+As noted earlier, annual residential PV generation is exogenous and drawn from [NREL dGen](https://maps.nrel.gov/dgen) scenario results. These values are presented in the table that follows.
+
+```{python}
+#| output: asis
+#| tbl-align: "left"
+#| label: "tbl-residential-pv"
+#| tbl-cap: "Annual residential PV generation, from the NREL dGen model (TWh)"
+#| tbl-cap-location: margin
+
+df = pd.read_sql("SELECT * FROM MinGenGroupTarget", conn)
+df['min_act_g'] /= (0.0036*1000)
+df_sel = df.pivot_table(
+                index=['group_name'],
+                columns='periods',
+                values='min_act_g').reset_index().set_index('group_name')
+df_sel.index = df_sel.index.str.replace('_RESPVGRP','')
+
+show(df_sel,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="Max Capacity", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
 
 
 ```
 
 
+### Capacity Credit
+Current values assume a default capacity credit value of 0.9 for all dispatchable generators, and 0.15 for all other generators, across the modeling time-horizon.
 
-:::
+Specifying the capacity credit for variable renewables like wind and solar is challenging because the credit declines as a function of installed capacity within the system. Trying to endogenously update the capacity credit within a single model solve requires either a non-linear or mixed integer formulation of Temoa, which greatly enhances the computational burden. However, since the Temoa OEO database is being solved myopically, we are developing the capability to update the capacity credit in-between solves, similar to the ReEDS model.
+
+Once a single time period solve is completed, the optimized electric generator capacities and electricity demand by region are passed to a module that updates the capacity credit for wind and solar by region, which will be used in the next time period solve. The code works by performing a simulation that compares available capacity to annual demand, as explained below.
+
+To calculate available capacity, each existing generating unit plus the new installed capacity are assigned an Equivalent Forced Outage Rate - Demand (EFORd) value. The EFORd value represents the probability that the generator will be unavailable due to a forced outage or derating during a time when there is demand for this generator. Random numbers with a [0,1] range are drawn for each existing generating unit and new dispatchable generating capacity and compared with its EFORd value. Note that Temoa optimizes new capacity in aggregate by technology type rather than individual units. Thus, for the purposes of this calculation, new capacity is split into hypothetical units, where the capacity of each unit represents the average for that technology type.  If the random number exceeds the EFORd value, the generator is unavailable to meet demand; else, it is available. The exercise is repeated 50,000 times to obtain a large set of available generation capacity estimates by region.
+
+To calculate net demand, the product of installed wind and solar capacities multiplied by their respective hourly capacity factors are subtracted sequentially from the regional demand returned by Temoa. Since different clusters of wind and solar within Temoa have different capacity factors, the calculation takes into account the differences across clusters. (Note that the amount of electricity demanded by Temoa in each time period and region is determined endogenously, based on the relative cost-effectiveness of fuels and technologies used to meet end-use service demands.)
+
+Using this data, a standard reliability analysis is performed. For each hour of estimated net demand, the code compares all 50,000 available capacity estimates and records any instances where the net demand exceeds the available capacity. When this count is divided by the total number of iterations, it yields a loss of load probability (LOLP) estimate. A uniform adjustment to the demand  in all hours is made to bring each region to its benchmark reliability (an LOLP of 1 day in 10 years).
+
+Once the load has been adjusted to meet the LOLP benchmark, the capacity credits associated with increments of solar and wind in the next model time period are calculated. To do so, the procedure described above is repeated with an additional 1000 MW of wind or solar capacity. Once again, this new capacity increment is multiplied by the hourly capacity factor and subtracted from load to create a new net load profile. Since wind and solar work to reduce demand, their addition to the system may reduce the calculated LOLP. The demand increment that brings the LOLP back to its benchmark value -- known as the effective load carrying capability (ELCC) -- is determined. The ELCC represents the absolute amount of capacity credit that the installed wind and solar in each region should receive. The ELCC divided by the 1000 MW regional solar (or wind) capacity addition yields the capacity credit as a fraction. The calculation is repeated for each cluster of wind and solar (i.e., each resource profile) in each region, so that they each have their own unique capacity credit estimate for the next solve.
+
+This whole procedure will be repeated after each time period solve, until the end of the model time horizon is reached.
+
+```{python}
+
+df = pd.read_sql("SELECT regions, periods, tech, cf_tech FROM CapacityCredit", conn)
+
+df_sel = df.pivot_table(
+                index=['regions', 'tech'],
+                columns='periods',
+                values='cf_tech').reset_index()
+
+if 'periods' in df_sel.columns.names:
+    df_sel.columns.name = None
+
+identifier_cols = ['regions', 'tech']
+year_cols = sorted([col for col in df_sel.columns if col not in identifier_cols and col != ''])
+desired_columns = identifier_cols + year_cols
+
+df_sel = df_sel[desired_columns]
+
+
+show(df_sel,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="Capacity Credit", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+
+
+```
+
+### Ramp rates
+PowerGenome uses ramp rates from a [study by the California Utilities Public Commission](https://www.cpuc.ca.gov/General.aspx?id=6442462824). All clusters of a single technology, across any region, are assumed to have the same ramp rate.
+
+```{python}
+
+df = pd.read_sql("SELECT regions, tech, ramp_up FROM RampUp", conn)
+
+df['ramp_up'] = df['ramp_up'] * 100 # Convert to percentage
+
+df.columns = ["Region", "Technology", "Ramp Up (% per hour)"]
+show(df,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="Ramp Rates", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+
+```
+
+###  Discount rates
+Discount rates for individual new generating technologies are represented by the weighted average cost of capital (WACC) in the NREL ATB, which is the average rate paid to finance the installations. These rates do not vary by region.
+
+```{python}
+
+df = pd.read_sql("SELECT regions, tech, vintage, tech_rate FROM DiscountRate WHERE tech in (SELECT tech FROM technologies WHERE sector='electric')", conn)
+
+df_sel = df.pivot_table(
+                index=['regions', 'tech'],
+                columns='vintage',
+                values='tech_rate').reset_index()
+
+if 'vintage' in df_sel.columns.names:
+    df_sel.columns.name = None
+
+identifier_cols = ['regions', 'tech']
+year_cols = sorted([col for col in df_sel.columns if col not in identifier_cols and col != ''])
+desired_columns = identifier_cols + year_cols
+
+df_sel = df_sel[desired_columns]
+
+show(df_sel,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="Ramp Rates", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+
+```
+
+### Transmission
+Transmission data from PowerGenome comes from EPA's bulk transmission data for IPM regions. Existing transmission data primarily include line losses (as reported in the Efficiency table), and maximum line capacity. For a pair of regions, the maximum line capacity may differ, depending on the direction of transmission. For our modeling purposes, we choose the maximum of values in both directions for a pair of regions, as a maximum line capacity value for that pair.
+
+#### Existing transmission
+Capacity and losses associated with existing inter-regional tranmission are presented in the table below, based on data from PowerGenome. These transmission lines are assumed to have no operating costs. However, intra-region operating costs and losses are assigned separately, based on data from the US EIA Annual Energy Outlook (AEO).
+
+```{python}
+
+df = pd.read_sql("SELECT C.regions, C.exist_cap, C.exist_cap_units, \
+    E.efficiency \
+    FROM ExistingCapacity AS C \
+    INNER JOIN Efficiency AS E ON \
+    C.regions = E.regions AND \
+    C.vintage = E.vintage AND \
+    C.tech = E.tech \
+    WHERE C.tech LIKE '%E_TRANS_R%'", conn)
+
+
+df.loc[:, 'region 1'] = df.regions.str.split('-').apply(lambda x: x[0])
+df.loc[:, 'region 2'] = df.regions.str.split('-').apply(lambda x: x[1])
+df.loc[:, 'efficiency'] = (1 - df.loc[:, 'efficiency']) * 100
+
+# Remove 'regions' and 'exist_cap_units' from the DataFrame
+df_sel = df.drop(['exist_cap_units', 'regions'], axis=1)
+
+# Reorder columns to have 'region 1' and 'region 2' at the beginning
+df_sel = df_sel[['region 1', 'region 2', 'exist_cap', 'efficiency']]
+
+df_sel.columns = ["Region 1", "Region 2", "Existing Capacity (GW)", "Line Loss (%)"]
+show(df_sel,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="Ramp Rates", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+
+```
+
+Intra-region T&D losses are assumed to be 4.7% based on the [2019 AEO](https://www.eia.gov/outlooks/aeo/data/browser/#/?id=8-AEO2018&cases=ref2018&sourcekey=0), calculated using the ratio of the net generation to the grid and the total net electricity generation for the years 2019-2020. Intra-region T&D operating costs were based on projections from the [2019 AEO](https://www.eia.gov/outlooks/aeo/data/browser/#/?id=8-AEO2019&region=0-0&cases=ref2019&start=2017&end=2050&f=A&linechart=ref2019-d111618a.75-8-AEO2019~ref2019-d111618a.76-8-AEO2019&map=&ctype=linechart&sourcekey=0) and are presented in the table below.
+
+```{python}
+
+df = pd.read_sql("SELECT DISTINCT periods, cost_variable FROM CostVariable WHERE tech = 'E_ELCTDLOSS'", conn)
+
+df.columns = ['Period', 'Intra-region T&D O&M ($M/PJ)']
+
+show(df,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="Ramp Rates", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+
+```
+
+#### New transmission
+New transmission line investment costs are obtained from PowerGenome. The underlying transmission line cost per MW-mile data for each region comes from the [NREL ReEDS model](https://www.nrel.gov/docs/fy17osti/67067.pdf), which PowerGenome uses to calculate costs per MW along with estimates of average distance between the regions. A discount rate of 6.9% and investment lifetime of 60 years is assumed, based on [Gorman et al, 2019](https://www.sciencedirect.com/science/article/pii/S0301421519305816). Transmission line losses for any new transmission capacity is assumed to be the same as existing capacity for each pair of regions. Intra-regional losses and variable O&M costs are assumed to be the same as that for existing transmission.
+
+```{python}
+
+df = pd.read_sql("SELECT regions, vintage, tech, cost_invest, cost_invest_units FROM CostInvest WHERE tech LIKE '%E_TRANS_N%'", conn)
+
+df_sel = df.pivot_table(
+                index=['regions', 'tech', 'cost_invest_units'],
+                columns='vintage',
+                values='cost_invest').reset_index()
+
+df_sel.loc[:,'region 1'] = df_sel.regions.str.split('-').apply(lambda x: x[0])
+df_sel.loc[:,'region 2'] = df_sel.regions.str.split('-').apply(lambda x: x[1])
+
+df_sel = df_sel.drop(['tech','regions'], axis=1)
+
+df_sel = df_sel[['region 1', 'region 2'] + [col for col in df_sel.columns if col not in ['region 1', 'region 2']]]
+
+df_sel.rename(columns={'cost_invest_units': 'units'}, inplace=True)
+
+if 'vintage' in df_sel.columns.names:
+    df_sel.columns.name = None
+
+identifier_cols = ['region 1', 'region 2', 'units']
+year_cols = sorted([col for col in df_sel.columns if col not in identifier_cols and col != ''])
+desired_columns = identifier_cols + year_cols
+
+df_sel = df_sel[desired_columns]
+
+
+show(df_sel,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="Ramp Rates", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+
+```
+
+## Technology/commodity lookup tool
+
+Use the search tool below to find technologies or commodities in the database. The search tool provides a list of all the technologies or commodities in the database that may be relevant to the query. The search is case-insensitive and will match any part of the technology or commodity name or description.
+
+
+```{python}
+
+df1 = pd.read_sql("SELECT * FROM commodities", conn)
+df1['desc'] = df1['comm_desc'].str.replace('#','').str.strip()
+df1['comm_tech'] = df1['comm_name']
+df1['type'] = 'commodity'
+
+df2 = pd.read_sql("SELECT * FROM technologies", conn)
+df2['desc'] = df2['tech_desc'].str.replace('#','').str.strip()
+df2['comm_tech'] = df2['tech']
+df2['type'] = 'technology'
+
+
+df = pd.concat([df1[['comm_tech','type','desc']], df2[['comm_tech','type','desc']]])
+
+if len(df)>0:
+   df.columns = ['Technology/Commodity','Type','Description']
+   show(df, max_rows=10, max_cols=10, name="Technology/Commodity", options={"scrollX": True, "scrollY": "300px", "pageLength": 10, "warn_on_undocumented_options":False})
+else:
+   print('')
+
+```
+
+## Network diagram lookup tool (WIP)
+Use the lookup tool above to identify specific commodity or technology names. Type the name in the box below to generate a corresponding network diagram for that commodity or technology. The slider can be used to view different upstream levels of the network diagram.
 
 
 
