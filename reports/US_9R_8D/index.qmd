@@ -11,4 +11,5 @@ Here are the reports for the US_9R_8D dataset:
 
 - [Overview](overview.qmd)
 - [Electric Sector](ElectricSector.qmd)
+- [Buildings Sector](BuildingsSector.qmd)
 - [Tables](tables.qmd)

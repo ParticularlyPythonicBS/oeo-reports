@@ -4,6 +4,7 @@ date: now
 execute:
   enabled: true
   echo: false
+  cache: true
 format:
     html:
         code-fold: true

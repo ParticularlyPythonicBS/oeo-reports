@@ -1,0 +1,146 @@
+---
+title: "Buildings Sector Overview"
+date: now
+execute:
+  enabled: true
+  echo: false
+  cache: true
+format:
+    html:
+        code-fold: true
+        toc: true
+        toc-title: "Contents"
+        # toc-location: right
+        toc-depth: 3
+        toc-numbering: true
+        number-sections: true
+---
+
+```{python}
+#| tags: [parameters]
+
+db_path =  "../../data/US_9R_8D.sqlite"
+```
+
+```{python}
+import sqlite3
+import pandas as pd
+from itables import show
+from IPython.display import Markdown, display
+
+import warnings
+warnings.filterwarnings("ignore", module='itables')
+
+
+conn = sqlite3.connect(db_path)
+cursor = conn.cursor()
+
+def close_connection():
+    cursor.close()
+    conn.close()
+
+```
+
+In the OEO database, the buildings sector is divided into the residential and commercial sectors. This notebook provides detail on two key components that describe these sectors:
+
+1. end-use service demands and
+2. the demand technologies used to meet those demands.
+
+The service demands are derived from the [NREL Electrification Futures Study](https://www.nrel.gov/analysis/electrification-futures.html) and consist of two components:
+
+1. the region-specific annual demands projected to 2050 and
+2. the apportionment of these annual demands at the hourly level.
+
+The demand technologies are characterized by their capital costs, fixed and variable operation and maintenance costs, efficiencies, capacity factors, existing capacity, and fuel inputs.
+
+## Service Demands
+
+The [NREL Electrification Futures Study](https://www.nrel.gov/analysis/electrification-futures) used the [EnergyPATHWAYS](https://www.evolved.energy/post/2016/02/19/energypathways) tool to develop a set of energy demand and supply projections for the end-use sectors in the US out to 2050. These annual projections are available at the state level for subsectors such as residential/commercial space heating, air conditioning, cooking, and water heating. The study also has state-level projections of hourly electricity demands for some of these subsectors. We are currently using these two datasets to develop demand projections for the OEO database. In the future, we plan to utilize more detailed projections based on [this multi-year NREL study](https://www.nrel.gov/buildings/end-use-load-profiles) that is currently in progress.
+
+### Annual Demand Projections <a class="anchor" id="annual_demands"></a>
+The [NREL Electrification Futures Study (EFS) report](https://www.nrel.gov/docs/fy18osti/71500.pdf) published in 2018 presents a range of demand scenarios for all energy sectors in the United States. We used the estimates of buildings-related service demands for the end-use demands listed in Table 1 available for download [here](https://data.nrel.gov/submissions/92). EFS uses EIA service demand data at the US census division-level and downscales this to the state-level using end-use demand specific factors. For example, residential space heating service demands were downscaled using the product of each US state's share of heating-degree-days and residential square footage. In our databases we perform an additional aggregation to represent the state-level demands from EFS at the OEO region-level (shown in Figure 1). Commercial ventilation is an exception in that the the annual service demands were estimated from [AEO](https://www.eia.gov/outlooks/aeo/data/browser/#/?id=5-AEO2021&cases=ref2021&sourcekey=0) as the product of the commercial square footage of a region (collection of US states) times a ventilation efficiency times the ventialtion energy consumption. This was done to resolve inconsistencies across other parameters (specfically existing capacity and technology efficiencies) across EFS and AEO datasets - in part because EFS reports service demands for commercial ventialtion in giga-cubic-feet as opposed to the AEO estimate which is in peta-Joules.
+
+
+Table: Annual service demand categories and units drawn from the NREL Electrification Futures Study (unless noted otherwise) currently used in the OEO buildings database. The demand commodity names used in the OEO input database are also tabulated. {#tbl-NREL-futures tbl-cap-location="margin"}
+
+| End-Use Demand | Unit | OEO Demand Commodity |
+|:-|:-|:-|
+| Commercial Space Cooling | TERA-BTU | CSC |
+| Commercial Cooking | TERA-BTU | CCK |
+| Commercial Lighting | GIGA-LUMEN-YEAR | CLT |
+| Commercial Refrigeration | TERA-BTU | CRF |
+| Commercial Space Heating | TERA-BTU | CSH |
+| Commercial Ventilation[^1] | TRILLION-CUBIC-FEET-PER-MINUTE-HOUR | CVT |
+| Commercial Water Heating | TERA-BTU | CWH |
+| Commercial Other gas [^2] | MMBTU | COTHER_NGA |
+| Commercial Other electricity [<sup>2</sup>](#fn2) | MMBTU | COTHER_ELEC |
+| Commercial Other diesel [<sup>2</sup>](#fn2) | MMBTU | COTHER_DSL |
+| Residential Space Cooling | MMBTU | RSC |
+| Residential Refrigeration | MEGA-CUBIC-FEET | RRF |
+| Residential Lighting | GIGA-LUMEN-YEAR | RLT |
+| Residential Space Heating | MMBTU | RSH |
+| Residential Water Heating | MMBTU | RWH |
+| Residential Clothes Drying | GIGA-LB | RCD |
+| Residential Dishwashing | GIGA-CYCLE | RDW |
+| Residential Freezing | MEGA-CUBIC-FEET | RFZ |
+| Residential Cooking | MMBTU | RCK |
+| Residential Other electricity [^3] | MMBTU | ROTHER_ELEC |
+
+[^1]: Service demand estimated from AEO as commercial regional square footage $\times$ ventilation efficiency $\times$ ventilation energy consumption
+
+[^2]: The commercial other category in the OEO databases aggregates the service demands reported by EFS for the categories: 'Commercial Other', 'District Services', 'Office Equipment (NON-P.C.)' and 'Office Equipment (P.C.)'.
+
+[^3]: The residential other category in the OEO databases aggregates the service demands reported by EFS for the categories: 'Televisions and related', 'Computers and related', 'residential other uses' and 'residential furnace fans'.
+
+Annual end-use OEO regional demand projections to 2050 can be explored using the tool below
+
+
+::: {.panel-tabset}
+
+## Table
+
+```{python}
+
+df_demand = pd.read_sql_query("SELECT * FROM Demand WHERE demand_comm in (SELECT comm_name FROM commodities WHERE flag='d') \
+                            AND demand_comm in (SELECT output_comm FROM Efficiency WHERE tech IN (SELECT tech FROM technologies WHERE sector='residential' OR sector='commercial'))", conn)
+
+df_tech_desc = pd.read_sql("SELECT comm_name, comm_desc FROM commodities", conn)
+df_demand['demand_comm_desc'] = df_demand['demand_comm'].map(lambda x: df_tech_desc.loc[df_tech_desc.comm_name==x,'comm_desc'].values[0].replace('#','').strip())
+
+df_sel = df_demand.pivot_table(
+            index=['regions', 'demand_comm', 'demand_units', 'demand_comm_desc'],
+            columns='periods',
+            values='demand').reset_index()
+
+df_sel.rename(columns={'demand_units': 'units'}, inplace=True)
+
+if 'periods' in df_sel.columns.names:
+    df_sel.columns.name = None  # Remove the name of the index column
+
+identifier_cols = ['regions', 'demand_comm', 'units', 'demand_comm_desc']
+
+year_cols = sorted([col for col in df_sel.columns if col not in identifier_cols and col != ''])
+
+# Construct the final desired column list
+final_columns = identifier_cols + year_cols
+
+# Select and reorder the DataFrame with the desired columns
+df_sel = df_sel[final_columns]
+
+show(df_sel,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="generators", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+```
+
+## Plots
+```{python}
+
+```
+
+:::
