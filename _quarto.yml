@@ -16,6 +16,16 @@ website:
         href: reports/US_9R_8D/index.qmd
 format:
   html:
-    theme: cosmo
+    theme:
+      light: flatly
+      dark: darkly
     css: styles.css
     toc: true
+    code-links:
+      - repo: https://github.com/ParticularlyPythonicBS/oeo-reports
+        icon: github
+        text: View on GitHub
+        href: https://github.com/ParticularlyPythonicBS/oeo-reports
+
+execute:
+  cache: true
