@@ -158,9 +158,10 @@ filtered_data = (demand_view && demand_view.length > 0)
 
 
 Plot.plot({
+    x: {tickFormat: "", label: "Periods"},
     color: {legend: true},
     marks: [
-        Plot.barY(filtered_data, {x: "periods", y: "demand", fill: "demand_comm_desc", strokeWidth: 2})
+        Plot.barY(filtered_data, {x: "periods", y: "demand", fill: "demand_comm_desc", strokeWidth: 2,  tip: "x"})
     ],
 })
 
@@ -234,11 +235,11 @@ function makeDemandProfilePlot(region_view, tech_view) {
   }
 
   return Plot.plot({
-      x: {tickFormat: d => d, label: "Hour"},
+      x: {tickFormat: "", label: "Hour"},
       y: {label: "Hourly demand fraction"},
       color: {legend: true},
       marks: [
-          Plot.lineY(filtered_data, {y: "dds", stroke: "demand_name", strokeWidth: 2})
+          Plot.lineY(filtered_data, {y: "dds", stroke: "demand_name", strokeWidth: 2, tip: "x"})
       ],
   })
 }
@@ -338,11 +339,11 @@ function makeInvestmentCostPlot(region_view, tech_view) {
   }
 
   return Plot.plot({
-      x: {tickFormat: d => d, label: "Vintage"},
+      x: {tickFormat: "", label: "Vintage"},
       y: {label: "Investment Costs ($M/giga lumens)"},
       color: {legend: true},
       marks: [
-          Plot.lineY(filtered_data, {x: "vintage", y: "cost_invest", stroke: "tech", strokeWidth: 2})
+          Plot.lineY(filtered_data, {x: "vintage", y: "cost_invest", stroke: "tech", strokeWidth: 2, tip: "x"})
       ],
   })
 }

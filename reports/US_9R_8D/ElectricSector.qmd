@@ -195,11 +195,11 @@ function makeInvestmentPlot(region_view, tech_view) {
   }
 
   return Plot.plot({
-      x: {tickFormat: d => d},
+      x: {tickFormat: "", label: "Vintage"},
       y: {label: "Investment costs ($M/GW)"},
       color: {legend: true},
       marks: [
-          Plot.lineY(filtered_data, {x: "vintage", y: "cost_invest", stroke: "tech", strokeWidth: 2})
+          Plot.lineY(filtered_data, {x: "vintage", y: "cost_invest", stroke: "tech", strokeWidth: 2, tip: "x"})
       ],
   })
 }
@@ -267,11 +267,11 @@ function makeFixedCostPlot(region_view, tech_view) {
   }
 
   return Plot.plot({
-      x: {tickFormat: d => d},
+      x: {tickFormat: "", label: "Vintage"},
       y: {label: "Fixed costs ($M/GW)"},
       color: {legend: true},
       marks: [
-          Plot.barY(filtered_data, {x: "vintage", y: "cost_fixed", fill: "tech", strokeWidth: 2})
+          Plot.barY(filtered_data, {x: "vintage", y: "cost_fixed", fill: "tech", strokeWidth: 2, tip: "x"})
       ],
   })
 }
@@ -338,11 +338,11 @@ function makeVariableCostPlot(region_view, tech_view) {
   }
 
   return Plot.plot({
-      x: {tickFormat: d => d},
+      x: {tickFormat: "", label: "Vintage"},
       y: {label: "Variable costs ($M/PJ)"},
       color: {legend: true},
       marks: [
-          Plot.barY(filtered_data, {x: "vintage", y: "cost_variable", fill: "tech", strokeWidth: 2})
+          Plot.barY(filtered_data, {x: "vintage", y: "cost_variable", fill: "tech", strokeWidth: 2, tip: "x"})
       ],
   })
 }
@@ -464,8 +464,8 @@ capacity_rows = Array.from({length: capacity_data.regions.length}, (_, i) =>
 capacity_region_set = Array.from(new Set(capacity_rows.map(d => d.regions)))
 capacity_tech_set = Array.from(new Set(capacity_rows.map(d => d.tech)))
 
-viewof capacity_region_view = Inputs.select(capacity_region_set, {label: "region", multiple: true})
-viewof capacity_tech_view = Inputs.select(capacity_tech_set, {label: "technology", multiple: true})
+viewof capacity_region_view = Inputs.select(capacity_region_set, {label: "region", multiple: false})
+viewof capacity_tech_view = Inputs.select(capacity_tech_set, {label: "technology", multiple: false})
 
 
 function makeCapacityPlot(region_view, tech_view) {
@@ -479,12 +479,12 @@ function makeCapacityPlot(region_view, tech_view) {
   }
 
   return Plot.plot({
-      x: {tickFormat: d => d, label: "Hour"},
+      x: {tickFormat: "", label: "Hour"},
       y: {label: "Capacity factor"},
       color: {legend: true},
       marks: [
           Plot.lineY(filtered_data,
-                    {y: "cf_tech", stroke: "tech", strokeWidth: 2})
+                    {y: "cf_tech", stroke: "tech", strokeWidth: 2, tip: "x"})
       ],
   })
 }

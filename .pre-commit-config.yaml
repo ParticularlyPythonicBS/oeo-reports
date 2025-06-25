@@ -2,7 +2,7 @@ repos:
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.7.12
     hooks:
-    # Dependency management
+      # Dependency management
       - id: uv-lock
         name: uv-lock (Update uv.lock if pyproject.toml changed)
         files: ^pyproject\.toml$
@@ -32,6 +32,16 @@ repos:
   - repo: https://github.com/adamtheturtle/doccmd-pre-commit
     rev: v2025.4.8
     hooks:
-    -   id: doccmd
-        args: ["--language", "python", "--command", "ruff format", "--no-pad-file", "--no-pad-groups", "--markdown-extension", ".qmd"]
+      - id: doccmd
+        args:
+          [
+            "--language",
+            "python",
+            "--command",
+            "ruff format",
+            "--no-pad-file",
+            "--no-pad-groups",
+            "--markdown-extension",
+            ".qmd",
+          ]
         additional_dependencies: ["ruff"]
