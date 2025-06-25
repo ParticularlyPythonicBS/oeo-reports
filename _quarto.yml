@@ -3,6 +3,7 @@ project:
   output-dir: _site
 website:
   title: OEO Report Dashboard
+  favicon: assets/icon.png
   navbar:
     search: true
     left:

@@ -107,6 +107,8 @@ df_demand = pd.read_sql_query("SELECT * FROM Demand WHERE demand_comm in (SELECT
 df_tech_desc = pd.read_sql("SELECT comm_name, comm_desc FROM commodities", conn)
 df_demand['demand_comm_desc'] = df_demand['demand_comm'].map(lambda x: df_tech_desc.loc[df_tech_desc.comm_name==x,'comm_desc'].values[0].replace('#','').strip())
 
+ojs_define(data =df_demand)
+
 df_sel = df_demand.pivot_table(
             index=['regions', 'demand_comm', 'demand_units', 'demand_comm_desc'],
             columns='periods',
@@ -139,7 +141,29 @@ show(df_sel,
 ```
 
 ## Plots
-```{python}
+```{ojs}
+
+
+rows = Array.from({length: data.demand_comm.length}, (_, i) =>
+  Object.fromEntries(Object.entries(data).map(([k, v]) => [k, v[i]]))
+)
+
+demand_set = Array.from(new Set(rows.map(d => d.demand_comm)))
+
+// viewof demand_view = Inputs.select([null].concat(demand_set), {label: "demand", multiple: true})
+viewof demand_view = Inputs.select(demand_set, {label: "demand", multiple: true})
+
+filtered_data = (demand_view && demand_view.length > 0)
+  ? rows.filter(d => demand_view.includes(d.demand_comm))
+  : rows
+
+
+Plot.plot({
+    color: {legend: true},
+    marks: [
+        Plot.barY(filtered_data, {x: "periods", y: "demand", fill: "demand_comm_desc", strokeWidth: 2})
+    ],
+})
 
 ```
 

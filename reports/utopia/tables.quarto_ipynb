@@ -1,0 +1,130 @@
+{
+  "cells": [
+    {
+      "cell_type": "raw",
+      "metadata": {},
+      "source": [
+        "---\n",
+        "title: \"utopia Tables\"\n",
+        "date: now\n",
+        "execute:\n",
+        "  enabled: true\n",
+        "  echo: false\n",
+        "format:\n",
+        "    html:\n",
+        "        code-fold: true\n",
+        "        toc: true\n",
+        "        toc-title: \"Contents\"\n",
+        "        # toc-location: right\n",
+        "        toc-depth: 2\n",
+        "        toc-numbering: true\n",
+        "        number-sections: true\n",
+        "---"
+      ],
+      "id": "853587ed"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tags": [
+          "parameters"
+        ]
+      },
+      "source": [
+        "db_path =  \"../../data/utopia.sqlite\""
+      ],
+      "id": "db3f95f0",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "import sqlite3\n",
+        "\n",
+        "import warnings\n",
+        "warnings.filterwarnings(\"ignore\", module='itables')\n",
+        "\n",
+        "def close_connection():\n",
+        "    cursor.close()\n",
+        "    conn.close()\n",
+        "\n",
+        "def get_row_count(table_name):\n",
+        "    query = f\"SELECT COUNT(*) FROM {table_name}\"\n",
+        "    cursor.execute(query)\n",
+        "    return cursor.fetchone()[0]\n",
+        "\n",
+        "def get_column_count(table_name):\n",
+        "    query = f\"PRAGMA table_info({table_name})\"\n",
+        "    cursor.execute(query)\n",
+        "    return len(cursor.fetchall())\n",
+        "\n",
+        "def get_table_names():\n",
+        "    query = \"SELECT name FROM sqlite_master WHERE type='table'\"\n",
+        "    cursor.execute(query)\n",
+        "    return [row[0] for row in cursor.fetchall()]\n",
+        "\n",
+        "def get_table_names():\n",
+        "    query = \"SELECT name FROM sqlite_master WHERE type='table'\"\n",
+        "    cursor.execute(query)\n",
+        "    return [row[0] for row in cursor.fetchall()]"
+      ],
+      "id": "661af783",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| output: asis\n",
+        "\n",
+        "import pandas as pd\n",
+        "from itables import show\n",
+        "from IPython.display import Markdown, display\n",
+        "\n",
+        "conn = sqlite3.connect(db_path)\n",
+        "cursor = conn.cursor()\n",
+        "\n",
+        "table_names = get_table_names()\n",
+        "\n",
+        "for table_name in table_names:\n",
+        "    row_count = get_row_count(table_name)\n",
+        "    column_count = get_column_count(table_name)\n",
+        "    display(Markdown(f\"\\n\\n\"))\n",
+        "    display(Markdown(f\"## {table_name}\"))\n",
+        "\n",
+        "    if row_count == 0 or column_count == 0:\n",
+        "        display(Markdown(\"No data available in this table.\\n\\n\"))\n",
+        "        continue\n",
+        "    df = pd.read_sql_query(f\"SELECT * FROM '{table_name}' LIMIT 1000\", conn)\n",
+        "    show(df, max_rows=10, max_cols=10, name=table_name, options={\"scrollX\": True, \"scrollY\": \"300px\", \"pageLength\": 10, \"warn_on_undocumented_options\":False})\n",
+        "    display(Markdown(f\"**Row Count:** {row_count} | **Column Count:** {column_count}\"))"
+      ],
+      "id": "188814f2",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "close_connection()"
+      ],
+      "id": "690d9418",
+      "execution_count": null,
+      "outputs": []
+    }
+  ],
+  "metadata": {
+    "kernelspec": {
+      "name": "python3",
+      "language": "python",
+      "display_name": "Python 3 (ipykernel)",
+      "path": "/media/Secondary/Projects/oeo_reports/.venv/share/jupyter/kernels/python3"
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 5
+}
