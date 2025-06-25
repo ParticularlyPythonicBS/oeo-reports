@@ -94,7 +94,6 @@ Table: Annual service demand categories and units drawn from the NREL Electrific
 
 Annual end-use OEO regional demand projections to 2050 can be explored using the tool below
 
-
 ::: {.panel-tabset}
 
 ## Table
@@ -141,6 +140,7 @@ show(df_sel,
 ```
 
 ## Plots
+
 ```{ojs}
 
 
