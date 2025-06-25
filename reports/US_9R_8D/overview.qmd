@@ -320,6 +320,8 @@ df2['type'] = 'technology'
 
 df = pd.concat([df1[['comm_tech','type','desc']], df2[['comm_tech','type','desc']]])
 
+df = df.reset_index(drop=True)
+
 if len(df)>0:
    df.columns = ['Technology/Commodity','Type','Description']
    show(df, max_rows=10, max_cols=10, name="Technology/Commodity", options={"scrollX": True, "scrollY": "300px", "pageLength": 10, "warn_on_undocumented_options":False})
