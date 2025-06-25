@@ -57,8 +57,8 @@ The demand technologies are characterized by their capital costs, fixed and vari
 
 The [NREL Electrification Futures Study](https://www.nrel.gov/analysis/electrification-futures) used the [EnergyPATHWAYS](https://www.evolved.energy/post/2016/02/19/energypathways) tool to develop a set of energy demand and supply projections for the end-use sectors in the US out to 2050. These annual projections are available at the state level for subsectors such as residential/commercial space heating, air conditioning, cooking, and water heating. The study also has state-level projections of hourly electricity demands for some of these subsectors. We are currently using these two datasets to develop demand projections for the OEO database. In the future, we plan to utilize more detailed projections based on [this multi-year NREL study](https://www.nrel.gov/buildings/end-use-load-profiles) that is currently in progress.
 
-### Annual Demand Projections <a class="anchor" id="annual_demands"></a>
-The [NREL Electrification Futures Study (EFS) report](https://www.nrel.gov/docs/fy18osti/71500.pdf) published in 2018 presents a range of demand scenarios for all energy sectors in the United States. We used the estimates of buildings-related service demands for the end-use demands listed in Table 1 available for download [here](https://data.nrel.gov/submissions/92). EFS uses EIA service demand data at the US census division-level and downscales this to the state-level using end-use demand specific factors. For example, residential space heating service demands were downscaled using the product of each US state's share of heating-degree-days and residential square footage. In our databases we perform an additional aggregation to represent the state-level demands from EFS at the OEO region-level (shown in Figure 1). Commercial ventilation is an exception in that the the annual service demands were estimated from [AEO](https://www.eia.gov/outlooks/aeo/data/browser/#/?id=5-AEO2021&cases=ref2021&sourcekey=0) as the product of the commercial square footage of a region (collection of US states) times a ventilation efficiency times the ventialtion energy consumption. This was done to resolve inconsistencies across other parameters (specfically existing capacity and technology efficiencies) across EFS and AEO datasets - in part because EFS reports service demands for commercial ventialtion in giga-cubic-feet as opposed to the AEO estimate which is in peta-Joules.
+### Annual Demand Projections
+The [NREL Electrification Futures Study (EFS) report](https://www.nrel.gov/docs/fy18osti/71500.pdf) published in 2018 presents a range of demand scenarios for all energy sectors in the United States. We used the estimates of buildings-related service demands for the end-use demands listed in @tbl-NREL-futures available for download [here](https://data.nrel.gov/submissions/92). EFS uses EIA service demand data at the US census division-level and downscales this to the state-level using end-use demand specific factors. For example, residential space heating service demands were downscaled using the product of each US state's share of heating-degree-days and residential square footage. In our databases we perform an additional aggregation to represent the state-level demands from EFS at the OEO region-level (shown in @fig-ipm-regions). Commercial ventilation is an exception in that the the annual service demands were estimated from [AEO](https://www.eia.gov/outlooks/aeo/data/browser/#/?id=5-AEO2021&cases=ref2021&sourcekey=0) as the product of the commercial square footage of a region (collection of US states) times a ventilation efficiency times the ventialtion energy consumption. This was done to resolve inconsistencies across other parameters (specfically existing capacity and technology efficiencies) across EFS and AEO datasets - in part because EFS reports service demands for commercial ventialtion in giga-cubic-feet as opposed to the AEO estimate which is in peta-Joules.
 
 
 Table: Annual service demand categories and units drawn from the NREL Electrification Futures Study (unless noted otherwise) currently used in the OEO buildings database. The demand commodity names used in the OEO input database are also tabulated. {#tbl-NREL-futures tbl-cap-location="margin"}
@@ -106,7 +106,7 @@ df_demand = pd.read_sql_query("SELECT * FROM Demand WHERE demand_comm in (SELECT
 df_tech_desc = pd.read_sql("SELECT comm_name, comm_desc FROM commodities", conn)
 df_demand['demand_comm_desc'] = df_demand['demand_comm'].map(lambda x: df_tech_desc.loc[df_tech_desc.comm_name==x,'comm_desc'].values[0].replace('#','').strip())
 
-ojs_define(data =df_demand)
+ojs_define(demand_data =df_demand)
 
 df_sel = df_demand.pivot_table(
             index=['regions', 'demand_comm', 'demand_units', 'demand_comm_desc'],
@@ -144,18 +144,17 @@ show(df_sel,
 ```{ojs}
 
 
-rows = Array.from({length: data.demand_comm.length}, (_, i) =>
-  Object.fromEntries(Object.entries(data).map(([k, v]) => [k, v[i]]))
+demand_rows = Array.from({length: demand_data.demand_comm.length}, (_, i) =>
+  Object.fromEntries(Object.entries(demand_data).map(([k, v]) => [k, v[i]]))
 )
 
-demand_set = Array.from(new Set(rows.map(d => d.demand_comm)))
+demand_set = Array.from(new Set(demand_rows.map(d => d.demand_comm)))
 
-// viewof demand_view = Inputs.select([null].concat(demand_set), {label: "demand", multiple: true})
 viewof demand_view = Inputs.select(demand_set, {label: "demand", multiple: true})
 
 filtered_data = (demand_view && demand_view.length > 0)
-  ? rows.filter(d => demand_view.includes(d.demand_comm))
-  : rows
+  ? demand_rows.filter(d => demand_view.includes(d.demand_comm))
+  : demand_rows
 
 
 Plot.plot({
@@ -168,3 +167,420 @@ Plot.plot({
 ```
 
 :::
+
+### Hourly Demand Representation
+
+We use the [electricity demand profiles](https://data.nrel.gov/submissions/126) published by NREL for the demand categories listed in @tbl-demand-categories to approximate service demand patterns. Here we assume that the service demands follow the same pattern as hourly electricity demand. These profiles were developed by NREL using the outputs of other models such as ResStock/ComStock and other data (e.g., from metering studies) for a range of future scenarios. The results from the 'High-Electrification and Rapid End-use Technology Advancement' scenario are selected as the electrification profiles in our database as it incorporates the largest share of total service demands. In cases where the hourly profiles of a sub-sector are not available, we assume service demands are constant throughout the year.
+
+Table: Hourly service demand categories as reported by NREL EFS for the residential and commercial sectors in the OEO database.  {#tbl-demand-categories tbl-cap-location="margin"}
+
+| Sector | Sub-sector |
+|:-|:-|
+| commercial <img width=15/> |space heating and cooling<img width=15/>|
+| commercial | water heating |
+| commercial | other |
+| residential | space heating and cooling |
+| residential | water heating |
+| residential | clothes drying/washing |
+| residential | other |
+
+![The nine US regions developed for the electric sector in the OEO input database, based on aggregations of IPM regions](../../assets/IPM_regions_to_temoa_state_groups.jpg){#fig-ipm-regions fig-cap-location="margin"}
+
+The raw data from EFS combines space heating and cooling hourly load profiles. To separate the heating and cooling profiles we use population weighted heating and cooling degree hour $\text{hdh}/\text{cdh}$ data provided by Michael Roberts at the University of Hawaii (described in a forthcoming paper). This data is available at the hourly timescale for the year 2010 and is available across the IPM regions. We first calculate an average hdh for IPM regions within a given OEO region @fig-ipm-regions for each hour of 2010. Next, we calculate the hourly $\text{hdh}$ fraction as:
+$$
+\begin{equation*}
+\frac{\bar{hdh}}{\bar{hdh} + \bar{cdh}}
+\end{equation*}
+$$
+
+where $\bar{hdh}$ and $\bar{cdh}$ are the hourly hdh and cdh, respectively, averaged across IPM regions in a given OEO region. These fractions are calculated for each hour in each OEO region. Finally, the combined heating and cooling load from NREL EFS is multiplied by these fractions to estimate the heating load in each hour. The cooling load is similarly estimated as the total load multiplied by the fraction of cooling degree hours over the sum of heating and cooling degree hours. This disaggregation of hourly heating and cooling load is illustrated in @fig-hdh-oeo for two OEO regions.
+
+
+![Heating degree hour (hdh) and fraction of heating degree hour for the OEO ‘TX’ (left) and 'CEN' (right) region. The markers on the plot show the hourly hdh for the IPM regions within the given OEO region. The line shows the average hdh fraction for each hour smoothed with a moving average window of 20 hours for legibility.](../../assets/hdh_cdh_OEO.png){#fig-hdh-oeo fig-cap-location="margin"}
+
+
+```{python}
+
+df = pd.read_sql(
+        "SELECT * FROM DemandSpecificDistribution",
+        conn)
+
+ojs_define(demand_profile_data=df)
+
+```
+
+
+```{ojs}
+
+demand_profile_rows = Array.from({length: demand_profile_data.regions.length}, (_, i) =>
+  Object.fromEntries(Object.entries(demand_profile_data).map(([k, v]) => [k, v[i]]))
+)
+
+demand_profile_region_set = Array.from(new Set(demand_profile_rows.map(d => d.regions)))
+demand_profile_set = Array.from(new Set(demand_profile_rows.map(d => d.demand_name)))
+
+viewof demand_profile_region_view = Inputs.select(demand_profile_region_set, {label: "region", multiple: false})
+viewof demand_profile_view = Inputs.select(demand_profile_set, {label: "demand", multiple: false})
+
+
+function makeDemandProfilePlot(region_view, tech_view) {
+  const filtered_data = demand_profile_rows.filter(d =>
+    (!demand_profile_region_view || demand_profile_region_view.length === 0 || demand_profile_region_view.includes(d.regions)) &&
+    (!demand_profile_view || demand_profile_view.length === 0 || demand_profile_view.includes(d.demand_name))
+  )
+
+  if (filtered_data.length === 0) {
+    return html`<div style="color: red; font-weight: bold;">No data available for the selected filters.</div>`;
+  }
+
+  return Plot.plot({
+      x: {tickFormat: d => d, label: "Hour"},
+      y: {label: "Hourly demand fraction"},
+      color: {legend: true},
+      marks: [
+          Plot.lineY(filtered_data, {y: "dds", stroke: "demand_name", strokeWidth: 2})
+      ],
+  })
+}
+
+makeDemandProfilePlot(demand_profile_region_view, demand_profile_view)
+
+```
+
+## Demand Technology Specification
+
+The characteristics of the demand technologies in the residential and commercial sectors in the OEO database are based on the Residential Demand Module (RDM) and Commercial Demand Module (CDM) of the National Energy Modeling System (NEMS) --- [Updated Buildings Sector Appliance and Equipment Costs and Efficiency](https://www.eia.gov/analysis/studies/buildings/equipcosts/). In our database we incorporate the **1) technology-specific efficiencies**, **2) fixed and variable operations and maintenance costs**, **3) investment costs**, **4) lifetimes**, and **5) typical capacities** reported in the appendices which are based on contract reports prepared by Navigant Consulting, Inc. for the U.S. Energy Information Administration. In this way we are able to represent a diverse set of equipment classes/types capable of servicing different parts of the buildings sector. For example, the technologies capable of meeting residential cooling demand include room air conditioners, central air conditioners, and heat pumps. Three types of heat pumps are represented for residential cooling: air-source, ground-source, and natural gas heat pumps. We used this dataset as-is, except for an adjustment of the heat pump coefficient of performance (COP) to reflect more regionally appropriate values. [Vaishnav et al. (2020)](https://pubs.acs.org/doi/abs/10.1021/acs.est.0c02705) used a dataset gathered from NEEP and estimated a linear relationship between COP and outside temperature for a variety of heat pumps. Their approach assumed that the indoor temperatures stay constant at 70 °F. We use the slope of this linear relationship to adjust heat pump COPs at the OEO region level using the NEMS database and applying state-level population weighted temperatures.
+
+Along with diversity in technology representations, the appendices above project the techno-economic parameters for residential and commercial equipment from 2020 to 2050 in 5 year increments. In most cases, two versions of the same technology for a given vintage are included in our database: 1) a standard version and 2) a high efficiency version. For example: The heating seasonal performance factors (HSPF) for a typical air-source heat pump of a 2020 vintage is 8.6 whereas a high-efficiency version has an HSPF of 9.0 (the costs, lifetimes may also vary across these different versions). These different versions of technologies are utilized as part of the OEO buildings database. The techno-economic parameters are assumed to be region agnostic with the exception of heat pump COPs as described above.
+
+Input values drawn directly from the database can be viewed in the sections below.
+
+### Investment Costs
+
+The investment costs are drawn from the [Residential Demand Module (RDM) and Commercial Demand Module (CDM)](https://www.eia.gov/analysis/studies/buildings/equipcosts/) of National Energy Modeling System. Specific values can be inspected using the look up tool below.
+
+
+::: {.panel-tabset}
+
+## Table
+
+```{python}
+
+df_tech_desc = pd.read_sql("SELECT tech, tech_desc FROM technologies", conn)
+
+df = pd.read_sql(
+  "SELECT regions, tech,vintage, cost_invest, cost_invest_units FROM CostInvest WHERE tech IN (SELECT tech FROM technologies WHERE sector=='residential' OR sector='commercial' ) ORDER BY tech, vintage",
+  conn)
+
+df['agg_tech'] = df['tech'].map(lambda x: df_tech_desc.loc[df_tech_desc.tech==x,'tech_desc'].values[0].replace('#','').strip())
+
+ojs_define(investment_cost_data=df)
+
+df_sel = df.pivot_table(
+            index=['regions', 'tech', 'agg_tech', 'cost_invest_units'],
+            columns='vintage',
+            values='cost_invest').reset_index()
+
+df_sel.rename(columns={'cost_invest_units': 'units', 'agg_tech': 'description'}, inplace=True)
+df_sel['units'] = df_sel['units'].str.replace('#','').str.replace('M$','$M').str.strip()
+
+
+if 'vintage' in df_sel.columns.names:
+    df_sel.columns.name = None  # Remove the name of the index column
+
+identifier_cols = ['regions', 'tech', 'units', 'description']
+
+year_cols = sorted([col for col in df_sel.columns if col not in identifier_cols and col != ''])
+
+# Construct the final desired column list
+final_columns = identifier_cols + year_cols
+
+# Select and reorder the DataFrame with the desired columns
+df_sel = df_sel[final_columns]
+
+show(df_sel,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="investment costs", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+```
+
+## Plots
+
+```{ojs}
+
+
+investment_cost_rows = Array.from({length: investment_cost_data.tech.length}, (_, i) =>
+  Object.fromEntries(Object.entries(investment_cost_data).map(([k, v]) => [k, v[i]]))
+)
+
+investment_cost_tech_set = Array.from(new Set(investment_cost_rows.map(d => d.tech)))
+investment_cost_regions_set = Array.from(new Set(investment_cost_rows.map(d => d.regions)))
+
+
+viewof investment_cost_region_view = Inputs.select(investment_cost_regions_set, {label: "region", multiple: false})
+viewof investment_cost_tech_view = Inputs.select(investment_cost_tech_set, {label: "investment cost", multiple: true})
+
+
+
+function makeInvestmentCostPlot(region_view, tech_view) {
+  const filtered_data = investment_cost_rows.filter(d =>
+    (!investment_cost_region_view || investment_cost_region_view.length === 0 || investment_cost_region_view.includes(d.regions)) &&
+    (!investment_cost_tech_view || investment_cost_tech_view.length === 0 || investment_cost_tech_view.includes(d.tech))
+  )
+
+  if (filtered_data.length === 0) {
+    return html`<div style="color: red; font-weight: bold;">No data available for the selected filters.</div>`;
+  }
+
+  return Plot.plot({
+      x: {tickFormat: d => d, label: "Vintage"},
+      y: {label: "Investment Costs ($M/giga lumens)"},
+      color: {legend: true},
+      marks: [
+          Plot.lineY(filtered_data, {x: "vintage", y: "cost_invest", stroke: "tech", strokeWidth: 2})
+      ],
+  })
+}
+
+makeInvestmentCostPlot(investment_cost_region_view, investment_cost_tech_view)
+
+```
+:::
+
+### Efficiency
+
+Our representation of the buildings sector is comprised of several end-use services like residential space heating and commercial ventilation (listed in @tbl-NREL-futures). These end-use service demands are met by a host of demand technologies that consume energy commodities and produce end-use demand commodities. In this section, we consider the numerous efficiency metrics that allow for this conversion and how they are represented in the OEO buildings database.
+
+@tbl-tech-efficiencies summarizes the end-use service demand, the efficiency metrics of the technologies used to service that demand and the units of the efficiency metric in the OEO database. The demands for some end-use services (like residential space heating) are specified in energy units and so the efficiencies of technologies meeting these demands are in units of energy output over energy input supplied. However, other end-use services (like commercial ventilation) have demand specified in physical units, and thus the efficiencies of the associated demand technologies are in physical units produced over input energy supplied.
+
+Table: Summary of technology efficiencies applied to building sub-sectors in the OEO database. {#tbl-tech-efficiencies tbl-cap-location="margin"}
+
+| End-Use Demand | Efficiency Metrics | Efficiency Units
+|:-|:-|:-|
+| Commercial Space Cooling | COP[^4], EER[^5], IEER [<sup>5</sup>](#fn5) | PJ-out/PJ-In|
+| Commercial Cooking | cooking energy efficiency | PJ-out/PJ-In |
+| Commercial Lighting | system efficacy[^6] | Giga-Lumen-Year/PJ |
+| Commercial Refrigeration | Nominal Capacity Over Average Input | PJ-out/PJ-In |
+| Commercial Space Heating | COP, thermal efficiency[^7], COP, AFUE[^8]| PJ-out/PJ-In |
+| Commercial Ventilation | ventilation efficiency | Trillion-CFM-hour/PJ-in |
+| Commercial Water Heating | thermal efficiency, SEF[^9], COP | PJ-out/PJ-In |
+| Residential Space Cooling | SEER[^10], EER, COP | PJ-out/PJ-In |
+| Residential Refrigeration | typical capacity over annual energy consumption | Mega-Cubic-Feet/PJ |
+| Residential Lighting | system efficacy | Giga-Lumen-Year/PJ |
+| Residential Space Heating | AFUE, thermal efficiency, HSPF[^11], COP, HHV[^12]| PJ-out/PJ-In |
+| Residential Water Heating | UEF[<sup>9</sup>](#fn9), SEF [<sup>9</sup>](#fn9)  | PJ-out/PJ-In |
+| Residential Clothes Drying | Combined Energy Factor | Giga-Lb/PJ |
+| Residential Dishwashing | cycles per year over annual energy use | Giga-Cycles/PJ |
+| Residential Freezing | typical capacity over annual energy consumption | Mega-Cubic-Feet/PJ |
+| Residential Cooking | cooking energy efficiency | PJ-out/PJ-in |
+
+[^4]: Coefficient of Performance (COP):  Energy efficiency rating measure determined, under specific testing conditions, by dividing the useful heating or cooling delivered by the required energy input.
+[^5]: Energy Efficiency Ratio (EER, IEER): A ratio representing the cooling capacity in Btu per hour by the power input in watts at any given set of rating conditions, expressed in Btu per hour per watt.
+[^6]: Lighting efficiencies are represented by efficacy in lumens/watt.
+[^7]: Thermal efficiency (TE): the percentage of input heat energy that is transformed into useful work.
+[^8]: Annual Fuel Utilization Efficiency (AFUE): Efficiency rating based on average usage, including on and off cycling, as set out in the Department of Energy's standardized test procedures.
+[^9]: Seasonal Energy Efficiency Ratio (SEER): The total cooling of a central unitary air conditioner or a unitary heat pump in Btu during its normal annual usage period for cooling divided by the total electric energy input in watt-hours during the same period.
+[^10]: Solar Energy Factor (SEF) and Uniform Energy Factor (UEF): defined as the energy delivered by the system divided the electrical or gas energy put into the system.
+[^11]: Heating Seasonal Performance Factor (HSPF): The total heating delivered by a heat pump in Btu during its normal annual usage period for heating divided by total electric input in watt-hours during the same period.
+[^12]: Higher Heating Value (HHV): This thermal efficiency is fuel dependent and accounts for the latent heat of vaporization of water in the combustion products.
+
+As noted above, several end-use service demands are defined by units of service rather than energy. In these cases, the specified efficiency has different input and output units:
+
+- **Commercial Lighting**:
+Here conversion from electrical energy to lumens is represented by the system efficacy. The system efficacy is published in $\frac{\text{Lumens}}{\text{Watt}}$ and converted to $\frac{\text{Giga-Lumens}\cdot \text{year}}{\text{PJ}}$ by multiplying by $10^{-9} \frac{\text{Giga}}{1} / (3600 \frac{\text{J}}{\text{Wh}} \times 10^{-15} \frac{\text{PJ}}{\text{J}} \times 8760 \frac{\text{hours}}{\text{year}})$.
+- **Commercial Ventilation**:
+These conversion factors are taken from the Commercial Demand Module of the National Energy Modeling System as $\frac{\text{Trillion-CFM-hours}}{\text{PJ}}$.
+- **Residential Refrigeration**:
+An efficiency is derived as the typical capacity over annual energy consumption where typical capacity is in units of $\text{ft}^3$ and annual energy consumption is in the units of $\text{kWh}$ and subsequently converted to $\frac{\text{ft}^3}{\text{PJ}}$ by dividing by $3.6\times 10^{-9} \frac{\text{PJ}}{\text{kWh}}$.
+- **Residential Lighting**:
+Here conversion from electrical energy to lumens is represented by the system efficacy. The system efficacy is published in $\frac{\text{Lumens}}{\text{Watt}}$ and converted to $\frac{\text{Giga-Lumens}\cdot \text{year}}{\text{PJ}}$ by multiplying by $10^{-9} \frac{\text{Giga}}{1} / (3600 \frac{\text{J}}{\text{Wh}} \times 10^{-15} \frac{\text{PJ}}{\text{J}} \times 8760 \frac{\text{hours}}{\text{year}})$.
+- **Residential Clothes Drying**:
+The combined energy factor in the [EIA appendices](https://www.eia.gov/analysis/studies/buildings/equipcosts/) are presented in units of $\frac{\text{lb}}{\text{kWh}}$ and converted to $\frac{\text{Giga-lb}}{\text{PJ}}$ by multiplying by $10^{-9}\frac{\text{Giga}}{1} / (3.6\times10^{-9}\frac{\text{PJ}}{\text{kWh}})$.
+- **Residential Dishwashing**:
+An efficiency is derived as the number of cycles in year over the typical annual energy use. An average of $215 \frac{\text{cycles}}{\text{year}}$ is assumed as per the [EIA appendices](https://www.eia.gov/analysis/studies/buildings/equipcosts/). The calculated efficiency is presented in units of $\frac{\text{cycles}}{\text{kWh}}$ and converted to $\frac{\text{Giga-cycles}}{\text{PJ}}$ by multiplying by $10^{-9}\frac{\text{Giga}}{1} / (3.6\times10^{-9}\frac{\text{PJ}}{\text{kWh}})$.
+- **Residential Freezing**:
+An efficiency is derived as the typical capacity over annual energy consumption where typical capacity is in units of $\text{ft}^3$ and annual energy consumption is in the units of $\text{kWh}$ and subsequently converted to $\frac{\text{mega ft}^3}{\text{PJ}}$ by multiplying by $\frac{10^{-6}}{3.6\times 10^{-9}} \frac{\text{PJ}}{\text{kWh}}$.
+
+To calculate efficiencies for commercial refrigeration technologies, the following approach was adopted:
+
+- **Commercial Refrigeration**:
+An efficiency is derived as the nominal capacity over average input, calculated as the cooling or heat rejection capacity over the annual energy consumption with units of $\frac{\text{PJ}_\text{in}}{\text{PJ}_\text{out}}$, where the cooling or heat rejection capacity is in units of $\frac{\text{Btu}}{\text{hour}}$ and the annual energy consumption is in units of $\frac{\text{kWh}}{\text{Year}}$. The unit conversions are as follows (Note that $\frac{\text{PJ}_\text{out}}{\text{PJ}_\text{in}} = \frac{\text{Btu}_\text{out}}{\text{Btu}_\text{in}}$ since the conversion factors cancel out):
+$$
+\frac{\text{Capacity} \frac{\text{Btu}}{\text{hour}} \times 24 \frac{\text{hours}}{\text{day}} \times 365 \frac{\text{day}}{\text{year}}}{\text{Annual Energy Consumption} \frac{\text{kWh}}{\text{Year}} \times 3421.14 \frac{\text{Btu}}{\text{kWh}}}
+$$
+
+```{python}
+
+df_tech_desc = pd.read_sql("SELECT tech, tech_desc FROM technologies", conn)
+
+df = pd.read_sql("SELECT regions, tech, vintage, efficiency, eff_notes FROM Efficiency WHERE tech IN (SELECT tech FROM technologies WHERE sector=='residential' OR sector='commercial')", conn)
+df.loc[:,'agg_tech'] = df.loc[:,'tech']
+df_sum = df
+df_sum['agg_tech'] = df_sum['agg_tech'].map(lambda x: df_tech_desc.loc[df_tech_desc.tech==x,'tech_desc'].values[0].replace('#','').strip())
+
+df_sum = df_sum[['regions','tech','agg_tech','vintage','efficiency', 'eff_notes']]
+
+df_sum.columns = ["regions", "technology", "description","vintage",'efficiency', 'efficiency units' ]
+
+show(df_sum,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="investment costs", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+```
+
+### Existing Capacity
+
+To our knowledge, the existing installed capacities of the various technologies listed in the [EIA dataset](https://www.eia.gov/analysis/studies/buildings/equipcosts/) are not readily available. Here we rely on two main data source to estimate existing capacity at the technology level for each sub-sector in the OEO buildings database: **1) NREL EFS service demands scaled using a derived utilization factor** and **2) USEPA9r MARKAL database**. @tbl-capacity provides a summary of which data sources are used for each of the represented sub-sectors.
+
+Table: Summary of data sources used to estimate existing installed capacity for the buildings sub-sectors in the OEO database. {#tbl-capacity tbl-cap-location="margin"}
+
+| End-Use Demand | Data Source |
+|:-|:-|
+| Commercial Space Cooling | NREL EFS[^16]|
+| Commercial Cooking | NREL EFS |
+| Commercial Lighting | EPA MARKAL[^17] |
+| Commercial Refrigeration | NREL EFS |
+| Commercial Space Heating | NREL EFS |
+| Commercial Ventilation | EPA MARKAL |
+| Commercial Water Heating | NREL EFS |
+| Residential Space Cooling | NREL EFS |
+| Residential Refrigeration | NREL EFS |
+| Residential Lighting | EPA MARKAL |
+| Residential Space Heating | NREL EFS |
+| Residential Water Heating | EPA MARKAL |
+| Residential Clothes Drying | NREL EFS |
+| Residential Dishwashing | NREL EFS |
+| Residential Freezing | NREL EFS |
+| Residential Cooking | NREL EFS |
+
+[^16]: [NREL Electrification Futures Study (EFS)](https://www.nrel.gov/docs/fy18osti/71500.pdf).
+[^17]: [USEPA9r MARKAL database (Shay et al. 2013)](https://cfpub.epa.gov/si/si_public_record_Report.cfm?Lab=NRMRL&dirEntryID=150883)
+
+The estimation method from the two data sources are briefly described below:
+
+1. **NREL Electrification Futures Study**: First an end-use service demand specific 'utilization factor' is calculated using the hourly load profile data published in the EFS. This is done by calculating the average demand across the 8760 hours divided by the 95th percentile demand for each end-use service demand in each OEO region for which hourly load profiles are available. The existing capacity of the builings sector technologies is then estimated as the service demand in 2017 from EFS scaled using the calculated utilization factors.
+
+2. **USEPA9r MARKAL database**: Here we lean on existing capacity estimations from the USEPA9r MARKAL database [(Shay et al. 2013)](https://cfpub.epa.gov/si/si_public_record_Report.cfm?Lab=NRMRL&dirEntryID=150883). MARKAL spreadsheets report the existing capacities for most of the technologies listed in the EIA dataset for the [nine Census Divisions](https://www2.census.gov/geo/pdfs/maps-data/maps/reference/us_regdiv.pdf). However, since the OEO regions differ from the Census Divisions, we scale the reported existing capacities using [U.S. Census state population data](https://www.census.gov/data/tables/time-series/demo/popest/2010s-state-total.html) to obtain estimates of existing capacity in each U.S. state. Finally, we aggregate up to the OEO regions and estimate the existing capacity of the EIA technologies.
+
+MARKAL estimates the existing capacity by multiplying the demand met (taken from the [AEO](https://www.eia.gov/outlooks/aeo/)) in an end-use service sub-sector by the estimated market share of a technology contributing to the end-use service category. This value is then divided by a utilization factor to estimate existing capacity of a certain technology in a given region. We directly use the calculated existing capacities in the OEO databases for the end-use demands as listed in @tbl-tech-efficiencies.
+
+```{python}
+
+df_tech_desc = pd.read_sql("SELECT tech, tech_desc FROM technologies", conn)
+
+df = pd.read_sql("SELECT regions, tech,vintage, exist_cap, exist_cap_units FROM ExistingCapacity WHERE tech IN (SELECT tech FROM technologies WHERE sector=='residential' OR sector='commercial')", conn)
+df.loc[:,'agg_tech'] = df.loc[:,'tech']
+df_sum = df.drop("vintage", axis=1).groupby(by = ['regions','tech','agg_tech','exist_cap_units']).sum().reset_index()
+df_sum.sort_values(by='exist_cap', ascending=False, inplace=True)
+df_sum['agg_tech'] = df_sum['agg_tech'].map(lambda x: df_tech_desc.loc[df_tech_desc.tech==x,'tech_desc'].values[0].replace('#','').strip())
+
+df_sum[['exist_cap_units']] = 'to be updated' # this line needs to be deleted once the units for existing capacity have been updated directly in the database
+
+
+df_sum.columns = ["regions", "technology", "description", "units","capacity" ]
+
+df_sum.reset_index(drop=True, inplace=True)
+
+show(df_sum,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="investment costs", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+```
+
+### Discount Rate
+
+All new capacity is given a technology-specific discount rate of 30%. Without this specification, TEMOA's least cost optimization results in the early replacement of virtually all existing demand technologies with new capacity at higher efficiency. This 30% discount rate is used to ensure that existing capacity is utilized for the remainder of its lifetime under base case assumptions. In the future, we plan to update this hurdle rate based on calibrations from the updated OEO database.
+
+```{python}
+
+df_tech_desc = pd.read_sql("SELECT tech, tech_desc FROM technologies", conn)
+df = pd.read_sql("SELECT regions, tech, vintage, tech_rate FROM DiscountRate WHERE tech in (SELECT tech FROM technologies WHERE sector='residential' OR sector='commercial')", conn)
+df['agg_tech'] = df['tech'].map(lambda x: df_tech_desc.loc[df_tech_desc.tech==x,'tech_desc'].values[0].replace('#','').strip())
+
+df_sel = df.pivot_table(
+            index=['regions', 'tech', 'agg_tech'],
+            columns='vintage',
+            values='tech_rate').reset_index()
+
+df_sel.rename(columns={'agg_tech': 'description'}, inplace=True)
+
+if 'vintage' in df_sel.columns.names:
+    df_sel.columns.name = None  # Remove the name of the index column
+
+identifier_cols = ['regions', 'tech', 'description']
+
+year_cols = sorted([col for col in df_sel.columns if col not in identifier_cols and col != ''])
+
+# Construct the final desired column list
+final_columns = identifier_cols + year_cols
+
+# Select and reorder the DataFrame with the desired columns
+df_sel = df_sel[final_columns]
+
+
+show(df_sel,
+    columnDefs=[{"width": "120px", "targets": "_all"}],
+    autoWidth=False,
+    max_rows=10, max_cols=10, name="investment costs", options={
+    "scrollX": True,
+    "scrollY": "300px",
+    "pageLength": 10,
+    "warn_on_undocumented_options": False,
+})
+```
+
+### Tech Input Split
+
+We specify minimum shares of commodity inputs to residential space heating, commerical space heating, commercial ventilation and commercial refrigeration in the 2020 time period to match historical demand. The shares are determined using 2020 service demand data from NREL EFS. These constraints are lifted for all future time periods in the model allowing it to make decisions on technology adoption.
+
+## Look-up Tools
+
+### Technology/commodity lookup tool
+
+Use the search tool below to find technologies or commodities in the database. The search tool provides a list of all the technologies or commodities in the database that may be relevant to the query. The search is case-insensitive and will match any part of the technology or commodity name or description.
+
+
+```{python}
+
+df1 = pd.read_sql("SELECT * FROM commodities", conn)
+df1['desc'] = df1['comm_desc'].str.replace('#','').str.strip()
+df1['comm_tech'] = df1['comm_name']
+df1['type'] = 'commodity'
+
+df2 = pd.read_sql("SELECT * FROM technologies", conn)
+df2['desc'] = df2['tech_desc'].str.replace('#','').str.strip()
+df2['comm_tech'] = df2['tech']
+df2['type'] = 'technology'
+
+
+df = pd.concat([df1[['comm_tech','type','desc']], df2[['comm_tech','type','desc']]])
+
+df = df.reset_index(drop=True)
+
+if len(df)>0:
+   df.columns = ['Technology/Commodity','Type','Description']
+   show(df, max_rows=10, max_cols=10, name="Technology/Commodity", options={"scrollX": True, "scrollY": "300px", "pageLength": 10, "warn_on_undocumented_options":False})
+else:
+   print('')
+
+```
+
+
+```{python}
+close_connection()
+```
