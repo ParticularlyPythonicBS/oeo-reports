@@ -24,5 +24,6 @@
 # recursively re-ignore
 __pycache__
 .jupyter_cache
+*.quarto_ipynb
 
 /.quarto/
