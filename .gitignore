@@ -5,6 +5,7 @@
 !docs/
 !examples/
 !.github/
+!_extensions/
 
 !.gitignore
 !README.md

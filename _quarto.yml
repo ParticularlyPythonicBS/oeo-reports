@@ -17,9 +17,9 @@ website:
         href: reports/US_9R_8D/index.qmd
 format:
   html:
-    theme:
-      light: flatly
-      dark: darkly
+    theme: cosmo
+    #   light: flatly
+    #   dark: darkly
     css: styles.css
     toc: true
     code-links:
